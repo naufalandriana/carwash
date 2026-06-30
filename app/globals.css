@@ -1,26 +1,264 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ===== SAFE AREA & FULLSCREEN SUPPORT ===== */
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Untuk iPhone X ke atas (notch & home indicator) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Saat dalam mode standalone (PWA) */
+@media all and (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* Opsional: tambahan padding untuk headbar biar nggak ketutupan */
+  .headbar {
+    padding-top: env(safe-area-inset-top);
+  }
+  .bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@theme {
+  --color-primary: #004ac6;
+  --color-primary-container: #dbe1ff;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #001258;
+  --color-secondary: #505f76;
+  --color-secondary-container: #d0e1fb;
+  --color-on-secondary-container: #0b1c30;
+  --color-background: #faf8ff;
+  --color-surface: #faf8ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f3fe;
+  --color-surface-container: #ededf9;
+  --color-surface-container-high: #e7e7f3;
+  --color-surface-container-highest: #e1e2ed;
+  --color-on-surface: #191b23;
+  --color-on-surface-variant: #434655;
+  --color-outline: #737686;
+  --color-outline-variant: #c3c6d7;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+  --color-tertiary: #943700;
+  --color-tertiary-container: #ffdbcd;
+  --color-on-tertiary-container: #360f00;
+  --color-success: #146b2e;
+  --color-success-container: #b7f0c8;
+  --color-on-success-container: #002109;
+
+  --font-family-sans: 'Inter', sans-serif;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+@source inline("{bg-}{red,blue,green,yellow,purple,pink,indigo,cyan,emerald,rose,violet,fuchsia,amber,gray,sky,lime,teal,orange}-{400,500,600}");
+
+
+* {
+  font-family: 'Inter', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Transition umum buat elemen interaktif biar gak kaku */
+button,
+select,
+input,
+textarea {
+  transition: all 0.2s ease;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+.icon-fill {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+select { -webkit-appearance: none; }
+input[type=text], input[type=number] { outline: none; }
+
+/* Chart bars */
+.bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+.bar {
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  transition: height 0.5s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Timeline */
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: #c3c6d7;
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Page fade in – easing lebih smooth */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-fade {
+  animation: fadeIn 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Vehicle card hover */
+.vehicle-card {
+  transition: all 0.2s ease;
+}
+.vehicle-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 74, 198, 0.08);
+}
+
+/* Pressable – tambahin hover subtle biar gak kaget pas di-klik */
+.pressable {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.pressable:hover {
+  transform: scale(1.01);
+}
+.pressable:active {
+  transform: scale(0.98);
+}
+
+/* App container */
+.app-container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+@media (min-width: 768px) {
+  .app-container { max-width: 720px; padding: 0 24px; }
+}
+@media (min-width: 1024px) {
+  .app-container { max-width: 960px; padding: 0 32px; }
+}
+@media (min-width: 1280px) {
+  .app-container { max-width: 1120px; padding: 0 40px; }
+}
+
+/* Header inner */
+.header-inner {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+@media (min-width: 768px) {
+  .header-inner { max-width: 720px; padding: 0 24px; }
+}
+@media (min-width: 1024px) {
+  .header-inner { max-width: 960px; padding: 0 32px; }
+}
+@media (min-width: 1280px) {
+  .header-inner { max-width: 1120px; padding: 0 40px; }
+}
+
+/* Bottom nav responsive */
+@media (min-width: 768px) {
+  .bottom-nav {
+    max-width: 720px;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    border-radius: 20px 20px 0 0;
+    border-left: 1px solid #e1e2ed;
+    border-right: 1px solid #e1e2ed;
+  }
+}
+@media (min-width: 1024px) { .bottom-nav { max-width: 960px; } }
+@media (min-width: 1280px) { .bottom-nav { max-width: 1120px; } }
+
+/* Desktop grids */
+@media (min-width: 768px) {
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 16px;
+  }
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .tx-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .staff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .vehicle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+@media (min-width: 1024px) {
+  .stats-grid { grid-template-columns: 2.5fr 1fr 1fr; }
+  .tx-grid { grid-template-columns: 1fr 1fr 1fr; }
+  .staff-grid { grid-template-columns: 1fr 1fr 1fr; }
+  .vehicle-grid { grid-template-columns: 1fr 1fr 1fr; }
+  .laporan-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
 }
