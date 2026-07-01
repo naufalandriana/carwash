@@ -353,7 +353,7 @@ function DashboardContent() {
             <span className="material-symbols-outlined text-error text-[18px]">trending_down</span>
           </div>
           <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Pengeluaran</p>
-          <h3 className="text-xl font-medium mt-0.5 text-error">Rp 450.000</h3>
+          <h3 className="text-xl font-medium mt-0.5 text-error">Rp 0</h3>
           <p className="text-[11px] text-on-surface-variant mt-1">
             <span className="text-error font-medium">↓ 2%</span> lebih hemat
           </p>
