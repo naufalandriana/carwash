@@ -1,11 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useAppStore, useUser } from '@/lib/Store'
 import Badge from '@/components/ui/Badge'
 import Guard from '@/components/auth/Guard'
+import Headbar from '@/components/layout/Headbar'
+import BottomNavbar from '@/components/layout/ButtomNav'
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
 function fmtRupiah(n: number) {
   return 'Rp ' + n.toLocaleString('id-ID')
 }
@@ -18,7 +21,6 @@ function filterByDate(tx: { createdAt: string }, dateStr: string) {
   return tx.createdAt?.startsWith?.(dateStr) ?? false
 }
 
-// Jam WIB singkat, dipakai buat antrian & aktivitas terbaru (mis. "14:32 WIB")
 function formatTimeWIB(dateStr: string): string {
   const date = new Date(dateStr)
   if (isNaN(date.getTime())) return dateStr
@@ -64,6 +66,7 @@ function getMonthPoints() {
   return points
 }
 
+// ─── Chart Component ──────────────────────────────────────────────────────
 interface ChartDataset {
   labels: string[]
   values: number[]
@@ -230,19 +233,39 @@ function TrendChart({ dataset }: { dataset: ChartDataset }) {
   )
 }
 
+// ─── Dashboard Content ────────────────────────────────────────────────────
 function DashboardContent() {
-  const { transactions, updateTransactionStatus } = useAppStore()
+  const {
+    transactions,
+    updateTransactionStatus,
+    expenses,
+    loading,
+  } = useAppStore()
   const user = useUser()
   const isGuest = user?.role === 'guest'
-  const [range, setRange] = useState<'week' | 'month'>('week')
-
+  const [range, setRange] = useState<'today' | 'week' | 'month'>('today')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
-  // handle status update
 
+  // ── Hitung total pengeluaran hari ini ──────────────────────────────
+  const todayExpenses = useMemo(() => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    return expenses
+      .filter(e => {
+        const d = new Date(e.created_at)
+        return d >= start && d < end
+      })
+      .reduce((sum, e) => sum + e.nominal, 0)
+  }, [expenses])
+
+  // ── Ambil 3 pengeluaran terakhir ──────────────────────────────────
+  const recentExpenses = useMemo(() => expenses.slice(0, 3), [expenses])
+
+  // ── Handle finish status ───────────────────────────────────────────
   const handleFinish = async (id: string) => {
     if (isGuest) return
     setUpdatingId(id)
-
     try {
       await updateTransactionStatus(id, 'Selesai')
     } catch (err) {
@@ -252,11 +275,9 @@ function DashboardContent() {
     }
   }
 
-  // Nama user
+  // ── Data greeting & tanggal ────────────────────────────────────────
   const userName = user?.name || user?.role || 'User'
   const greeting = userName === 'User' ? 'User' : userName
-
-  // Tanggal hari ini (dinamis)
   const now = new Date()
   const dayName = now.toLocaleDateString('id-ID', { weekday: 'long' })
   const dateFormatted = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -266,11 +287,44 @@ function DashboardContent() {
   const todayRevenue = todayTxs.reduce((sum, tx) => sum + tx.harga, 0)
   const todayCount = todayTxs.length
 
-  // ✅ Antrian aktif: transaksi berstatus "Proses" (sedang dicuci/dikerjakan)
+  // ── Antrian aktif ──────────────────────────────────────────────────
   const queueTxs = transactions
     .filter(tx => tx.status === 'Proses')
     .sort((a, b) => new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime())
     .slice(0, 3)
+
+  // ── Chart data ──────────────────────────────────────────────────────
+  const getTodayPoints = () => {
+  return Array.from({ length: 24 }, (_, i) => ({
+    label: `${i.toString().padStart(2, '0')}`,
+    hour: i,
+    total: 0,
+  }))
+  }
+
+  const todayPoints = getTodayPoints()
+
+  transactions.forEach(tx => {
+    const createdAt = (tx as any).createdAt
+    if (!createdAt) return
+
+    const date = new Date(createdAt)
+    const now = new Date()
+
+    if (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    ) {
+      todayPoints[date.getHours()].total += tx.harga
+    }
+  })
+
+  const todayDataset: ChartDataset = {
+    labels: todayPoints.map(p => p.label),
+    values: todayPoints.map(p => p.total),
+    dates: todayPoints.map(p => `${p.hour}:00`),
+  }
 
   const weekPoints = getLast7Days()
   transactions.forEach(tx => {
@@ -298,8 +352,14 @@ function DashboardContent() {
     dates: monthPoints.map(p => p.date),
   }
 
-  const dataset = range === 'month' ? monthDataset : weekDataset
+  const dataset =
+  range === 'today'
+    ? todayDataset
+    : range === 'month'
+    ? monthDataset
+    : weekDataset
 
+  // ── Aktivitas terbaru ──────────────────────────────────────────────
   const recentActivities = transactions.slice(0, 4).map(tx => ({
     icon: tx.status === 'Selesai' ? 'check_circle' : 'autorenew',
     iconClass: tx.status === 'Selesai' ? 'text-green-600' : 'text-primary',
@@ -310,181 +370,207 @@ function DashboardContent() {
   }))
 
   return (
-    <div className="space-y-4 pb-24">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-medium text-on-surface leading-tight">
-            Halo, {greeting} 👋
-          </h2>
-          <p className="text-sm text-on-surface-variant mt-0.5">Ringkasan bisnis hari ini</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-on-surface-variant">{dayName}</p>
-          <p className="text-xs font-medium text-on-surface">{dateFormatted}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2.5">
-        <div className="col-span-3 sm:col-span-1 bg-primary rounded-2xl p-4 text-white">
-          <div className="flex justify-between items-start mb-3">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-              <span className="material-symbols-outlined text-white text-[18px] icon-fill">account_balance_wallet</span>
+    <div className="flex flex-col min-h-screen bg-surface">
+      <main className="flex-1 pb-24">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-medium text-on-surface leading-tight">
+                Halo, {greeting} 👋
+              </h2>
+              <p className="text-sm text-on-surface-variant mt-0.5">Ringkasan bisnis hari ini</p>
             </div>
-            <span className="text-[11px] font-medium bg-white/15 px-2.5 py-1 rounded-full">↑ 5.4%</span>
+            <div className="text-right">
+              <p className="text-xs text-on-surface-variant">{dayName}</p>
+              <p className="text-xs font-medium text-on-surface">{dateFormatted}</p>
+            </div>
           </div>
-          <p className="text-[11px] text-white/65 font-medium uppercase tracking-wider">Pendapatan hari ini</p>
-          <h3 className="text-xl font-medium mt-0.5">{fmtRupiah(todayRevenue)}</h3>
-          <p className="text-[11px] text-white/50 mt-1">+Rp 840rb dari kemarin</p>
-        </div>
 
-        <div className="col-span-3 sm:col-span-1 bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-          <div className="w-9 h-9 rounded-xl bg-secondary-container flex items-center justify-center mb-3">
-            <span className="material-symbols-outlined text-primary text-[18px] icon-fill">directions_car</span>
-          </div>
-          <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Kendaraan</p>
-          <h3 className="text-xl font-medium mt-0.5">{todayCount}</h3>
-          <p className="text-[11px] text-on-surface-variant mt-1">
-            <span className="text-green-600 font-medium">+12%</span> vs kemarin
-          </p>
-        </div>
-
-        <div className="col-span-3 sm:col-span-1 bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-          <div className="w-9 h-9 rounded-xl bg-error-container flex items-center justify-center mb-3">
-            <span className="material-symbols-outlined text-error text-[18px]">trending_down</span>
-          </div>
-          <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Pengeluaran</p>
-          <h3 className="text-xl font-medium mt-0.5 text-error">Rp 0</h3>
-          <p className="text-[11px] text-on-surface-variant mt-1">
-            <span className="text-error font-medium">↓ 2%</span> lebih hemat
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium text-on-surface">Antrian aktif</h4>
-            {!isGuest && (
-              <Link href="/Transaksi" className="text-xs font-medium text-primary flex items-center gap-0.5">
-                <span className="material-symbols-outlined text-[14px]">add</span> Tambah
-              </Link>
-            )}
-          </div>
-          <div className="divide-y divide-outline-variant">
-            {queueTxs.length === 0 ? (
-              <p className="text-sm text-on-surface-variant py-2">Tidak ada antrian</p>
-            ) : (
-              queueTxs.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                >
-                  <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      tx.tipe === 'mobil'
-                        ? 'bg-secondary-container'
-                        : 'bg-error-container'
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-[17px] icon-fill ${
-                        tx.tipe === 'mobil'
-                          ? 'text-primary'
-                          : 'text-error'
-                      }`}
-                    >
-                      {tx.tipe === 'mobil'
-                        ? 'directions_car'
-                        : 'motorcycle'}
-                    </span>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-on-surface truncate">
-                      {tx.plat} · {tx.model}
-                    </p>
-                    {tx.type && (
-                      <p className="text-xs text-primary font-medium truncate">
-                        · {tx.type}
-                      </p>
-                    )}
-                    <p className="text-xs text-on-surface-variant">
-                      {tx.karyawan.split(' ')[0]} ·{' '}
-                      {formatTimeWIB((tx as any).createdAt)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Badge status={tx.status} />
-                    {!isGuest && (
-                      <button
-                        onClick={() => handleFinish(tx.id)}
-                        disabled={updatingId === tx.id}
-                        className="w-6 h-6 flex items-center justify-center rounded-full bg-primary hover:bg-primary-dark active:scale-90 transition-all disabled:opacity-50"
-                        title="Tandai selesai"
-                      >
-                        {updatingId === tx.id ? (
-                          <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <span className="material-symbols-outlined text-white text-[14px]">
-                            arrow_forward_ios
-                          </span>
-                        )}
-                      </button>
-                    )}
-                  </div>
+          {/* ─── 3 Cards ──────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-3 gap-2.5">
+            {/* Card Pendapatan */}
+            <div className="col-span-3 sm:col-span-1 bg-primary rounded-2xl p-4 text-white transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/30">
+              <div className="flex justify-between items-start mb-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-white text-[18px] icon-fill">account_balance_wallet</span>
                 </div>
-                ))
-            )}
-          </div>
-        </div>
-
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium text-on-surface">Tren pendapatan</h4>
-            <select
-              value={range}
-              onChange={(e) => setRange(e.target.value as 'week' | 'month')}
-              className="text-xs bg-surface-container px-2.5 py-1.5 rounded-lg border-none text-on-surface-variant font-medium outline-none"
-            >
-              <option value="week">Minggu ini</option>
-              <option value="month">Bulan ini</option>
-            </select>
-          </div>
-          <TrendChart dataset={dataset} />
-        </div>
-      </div>
-
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-medium text-on-surface">Aktivitas terbaru</h4>
-          <Link href="/Transaksi?tab=riwayat" className="text-xs font-medium text-primary">
-            Lihat semua
-          </Link>
-        </div>
-        <div className="divide-y divide-outline-variant">
-          {recentActivities.length === 0 ? (
-            <p className="text-sm text-on-surface-variant py-2">Belum ada aktivitas</p>
-          ) : (
-            recentActivities.map((act, i) => (
-              <div key={i} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${act.bg}`}>
-                  <span className={`material-symbols-outlined text-[17px] icon-fill ${act.iconClass}`}>
-                    {act.icon}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-on-surface">{act.title}</p>
-                  {act.type && (
-                    <p className="text-xs text-primary font-medium">· {act.type}</p>
-                  )}
-                  <p className="text-xs text-on-surface-variant">{act.sub}</p>
-                </div>
+                <span className="text-[11px] font-medium bg-white/15 px-2.5 py-1 rounded-full">↑ 5.4%</span>
               </div>
-            ))
-          )}
+              <p className="text-[11px] text-white/65 font-medium uppercase tracking-wider">Pendapatan hari ini</p>
+              <h3 className="text-xl font-medium mt-0.5">{fmtRupiah(todayRevenue)}</h3>
+              <p className="text-[11px] text-white/50 mt-1">+Rp 840rb dari kemarin</p>
+            </div>
+
+            {/* Card Kendaraan */}
+            <div className="col-span-3 sm:col-span-1 bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl hover:border-primary/30">
+              <div className="w-9 h-9 rounded-xl bg-secondary-container flex items-center justify-center mb-3">
+                <span className="material-symbols-outlined text-primary text-[18px] icon-fill">directions_car</span>
+              </div>
+              <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Kendaraan</p>
+              <h3 className="text-xl font-medium mt-0.5">{todayCount}</h3>
+              <p className="text-[11px] text-on-surface-variant mt-1">
+                <span className="text-green-600 font-medium">+12%</span> vs kemarin
+              </p>
+            </div>
+
+            {/* ─── Card Pengeluaran ────────────────────────────────────── */}
+            <div className="col-span-3 sm:col-span-1 bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl hover:border-error/30">
+              <div className="flex items-start justify-between mb-2">
+                <div className="w-9 h-9 rounded-xl bg-error-container flex items-center justify-center">
+                  <span className="material-symbols-outlined text-error text-[18px]">trending_down</span>
+                </div>
+                <Link
+                  href="/Pengeluaran"
+                  className="flex items-center gap-0.5 text-xs font-medium text-on-surface-variant hover:text-primary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-error">add</span>
+                </Link>
+              </div>
+
+              <p className="text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">Pengeluaran Hari Ini</p>
+              <h3 className="text-xl font-medium mt-0.5 text-error">
+                {loading.expenses ? '...' : fmtRupiah(todayExpenses)}
+              </h3>
+
+              {/* Daftar 3 pengeluaran terakhir */}
+              <div className="mt-3 space-y-2 flex-1">
+                {loading.expenses ? (
+                  <p className="text-xs text-on-surface-variant">Memuat...</p>
+                ) : recentExpenses.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant">Belum ada pengeluaran</p>
+                ) : (
+                  recentExpenses.map((exp) => (
+                    <div key={exp.id} className="flex justify-between items-start text-xs">
+                      <div>
+                        <p className="text-on-surface truncate max-w-[140px] font-medium">
+                          {exp.nama_pengeluaran}
+                        </p>
+
+                        <p className="text-[11px] text-on-surface-variant">
+                          {new Date(exp.created_at).toLocaleDateString('id-ID', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+
+                      <span className="font-semibold text-error whitespace-nowrap">
+                        Rp {exp.nominal.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <Link
+                href="/Pengeluaran"
+                className="mt-3 text-center text-xs font-medium text-error hover:underline"
+              >
+                Lihat semua →
+              </Link>
+            </div>
+          </div>
+
+          {/* ─── Antrian & Chart ──────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-on-surface">Antrian aktif</h4>
+                {!isGuest && (
+                  <Link href="/Transaksi" className="text-xs font-medium text-primary flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-[14px]">add</span> Tambah
+                  </Link>
+                )}
+              </div>
+              <div className="divide-y divide-outline-variant">
+                {queueTxs.length === 0 ? (
+                  <p className="text-sm text-on-surface-variant py-2">Tidak ada antrian</p>
+                ) : (
+                  queueTxs.map((tx) => (
+                    <div key={tx.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${tx.tipe === 'mobil' ? 'bg-secondary-container' : 'bg-error-container'}`}>
+                        <span className={`material-symbols-outlined text-[17px] icon-fill ${tx.tipe === 'mobil' ? 'text-primary' : 'text-error'}`}>
+                          {tx.tipe === 'mobil' ? 'directions_car' : 'motorcycle'}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-on-surface truncate">{tx.plat} · {tx.model}</p>
+                        {tx.type && <p className="text-xs text-primary font-medium truncate">· {tx.type}</p>}
+                        <p className="text-xs text-on-surface-variant">{tx.karyawan.split(' ')[0]} · {formatTimeWIB((tx as any).createdAt)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge status={tx.status} />
+                        {!isGuest && (
+                          <button
+                            onClick={() => handleFinish(tx.id)}
+                            disabled={updatingId === tx.id}
+                            className="w-6 h-6 flex items-center justify-center rounded-full bg-primary hover:bg-primary-dark active:scale-90 transition-all disabled:opacity-50"
+                            title="Tandai selesai"
+                          >
+                            {updatingId === tx.id ? (
+                              <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              <span className="material-symbols-outlined text-white text-[14px]">arrow_forward_ios</span>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-on-surface">Tren pendapatan</h4>
+                <select
+                  value={range}
+                  onChange={(e) => setRange(e.target.value as 'today' | 'week' | 'month')}
+                  className="text-xs bg-surface-container px-2.5 py-1.5 rounded-lg border-none text-on-surface-variant font-medium outline-none"
+                >
+                  <></>
+                  <option value="today">Hari ini</option>
+                  <option value="week">Minggu ini</option>
+                  <option value="month">Bulan ini</option>
+                </select>
+              </div>
+              <TrendChart dataset={dataset} />
+            </div>
+          </div>
+
+          {/* ─── Aktivitas terbaru ────────────────────────────────────────── */}
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium text-on-surface">Aktivitas terbaru</h4>
+              <Link href="/Laporan" className="text-xs font-medium text-primary">
+                Lihat semua
+              </Link>
+            </div>
+            <div className="divide-y divide-outline-variant">
+              {recentActivities.length === 0 ? (
+                <p className="text-sm text-on-surface-variant py-2">Belum ada aktivitas</p>
+              ) : (
+                recentActivities.map((act, i) => (
+                  <div key={i} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${act.bg}`}>
+                      <span className={`material-symbols-outlined text-[17px] icon-fill ${act.iconClass}`}>
+                        {act.icon}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-on-surface">{act.title}</p>
+                      {act.type && <p className="text-xs text-primary font-medium">· {act.type}</p>}
+                      <p className="text-xs text-on-surface-variant">{act.sub}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
+      <BottomNavbar />
     </div>
   )
 }
