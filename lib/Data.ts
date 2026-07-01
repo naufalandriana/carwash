@@ -35,3 +35,12 @@ export interface Vehicle {
   name: string
   price: number
 }
+
+export interface Expense {
+  id: string
+  nama_pengeluaran: string
+  kategori: string | null
+  nominal: number
+  keterangan: string | null
+  created_at: string
+}

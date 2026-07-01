@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { useMemo } from 'react'
 import { supabase, DBTransaction, DBStaff, DBVehicle } from './Supabase'
-import type { Transaction, StaffMember, Vehicle } from './Data'
+import type { Transaction, StaffMember, Vehicle, Expense } from './Data'
 
 // ─── User Type ──────────────────────────────────────────────────────────────
 export interface User {
@@ -68,6 +68,7 @@ interface LoadingState {
   transactions: boolean
   staff: boolean
   vehicles: boolean
+  expenses: boolean
 }
 
 interface AppStore {
@@ -75,6 +76,7 @@ interface AppStore {
   staff: (StaffMember & { id: string })[]
   vehicles: Vehicle[]
   vehiclesDB: DBVehicle[]
+  expenses: Expense[]
 
   loading: LoadingState
   error: string | null
@@ -88,6 +90,7 @@ interface AppStore {
   fetchTransactions: () => Promise<void>
   addTransaction: (tx: Omit<Transaction, 'waktu' | 'createdAt'>) => Promise<void>
   updateTransactionStatus: (id: string, status: Transaction['status']) => Promise<void>
+  updateTransaction: (id: string, updates: Partial<Omit<Transaction, 'id' | 'waktu' | 'createdAt'>>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
 
   fetchStaff: () => Promise<void>
@@ -98,6 +101,12 @@ interface AppStore {
   fetchVehicles: () => Promise<void>
   addVehicle: (vehicle: Omit<DBVehicle, 'id' | 'created_at'>) => Promise<void>
   deleteVehicle: (id: string) => Promise<void>
+
+  // ── Expense methods ──
+  fetchExpenses: () => Promise<void>
+  addExpense: (data: Omit<Expense, 'id' | 'created_at'>) => Promise<void>
+  updateExpense: (id: string, data: Partial<Omit<Expense, 'id' | 'created_at'>>) => Promise<void>  // ⬅️ TAMBAH
+  deleteExpense: (id: string) => Promise<void>
 
   initStore: () => Promise<void>
   subscribeRealtime: () => () => void
@@ -111,7 +120,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
   staff: [],
   vehicles: [],
   vehiclesDB: [],
-  loading: { transactions: false, staff: false, vehicles: false },
+  expenses: [],
+  loading: {
+    transactions: false,
+    staff: false,
+    vehicles: false,
+    expenses: false,
+  },
   error: null,
   initialized: false,
   user: null,
@@ -129,13 +144,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       staff: [],
       vehicles: [],
       vehiclesDB: [],
+      expenses: [],
       initialized: false,
       error: null,
     })
     localStorage.removeItem('otowash_user')
   },
 
-  // ── Authenticate Admin dengan password saja ────────────────────────────────
   authenticateAdmin: async (password: string) => {
     set({ error: null })
     try {
@@ -152,7 +167,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
         throw new Error(data.error || 'Login gagal')
       }
 
-      // Login ke store dengan data dari API
       get().login({
         role: 'admin',
         name: data.user.name,
@@ -247,6 +261,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (error) throw error
     } catch (err: any) {
       set({ transactions: prev, error: err.message })
+    }
+  },
+
+  // ── UPDATE TRANSACTION (FULL EDIT) ──────────────────────────────────────
+  updateTransaction: async (id, updates) => {
+    const prev = get().transactions
+    set(s => ({
+      transactions: s.transactions.map(t =>
+        t.id === id ? { ...t, ...updates } : t
+      ),
+    }))
+    try {
+      const dbUpdates: any = { ...updates }
+      if (updates.status) {
+        dbUpdates.status = mapAppStatusToDB(updates.status)
+      }
+      const { error } = await supabase
+        .from('transactions')
+        .update(dbUpdates)
+        .eq('id', id)
+      if (error) throw error
+    } catch (err: any) {
+      set({ transactions: prev, error: err.message })
+      throw err
     }
   },
 
@@ -425,6 +463,103 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── EXPENSES ──────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // ── Fetch Expenses ──────────────────────────────────────────────────────
+  fetchExpenses: async () => {
+    set(s => ({ loading: { ...s.loading, expenses: true }, error: null }))
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      set({
+        expenses: data as Expense[],
+        loading: { ...get().loading, expenses: false },
+      })
+    } catch (err: any) {
+      set(s => ({ error: err.message, loading: { ...s.loading, expenses: false } }))
+    }
+  },
+
+  // ── Add Expense ──────────────────────────────────────────────────────────
+  addExpense: async (data) => {
+    const tempId = `temp-${Date.now()}`
+    const nowIso = new Date().toISOString()
+    const optimistic: Expense = {
+      ...data,
+      id: tempId,
+      created_at: nowIso,
+    }
+    set(s => ({ expenses: [optimistic, ...s.expenses] }))
+
+    try {
+      const { data: inserted, error } = await supabase
+        .from('expenses')
+        .insert({
+          nama_pengeluaran: data.nama_pengeluaran,
+          kategori: data.kategori,
+          nominal: data.nominal,
+          keterangan: data.keterangan,
+        })
+        .select()
+        .single()
+      if (error) throw error
+
+      set(s => ({
+        expenses: s.expenses.map(e => (e.id === tempId ? inserted : e)),
+      }))
+    } catch (err: any) {
+      set(s => ({
+        expenses: s.expenses.filter(e => e.id !== tempId),
+        error: err.message,
+      }))
+      throw err
+    }
+  },
+
+  // ── UPDATE EXPENSE ────────────────────────────────────────────────────── ⬅️ TAMBAH
+  updateExpense: async (id, data) => {
+    const prev = get().expenses
+    set(s => ({
+      expenses: s.expenses.map(e => (e.id === id ? { ...e, ...data } : e)),
+    }))
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .update({
+          nama_pengeluaran: data.nama_pengeluaran,
+          kategori: data.kategori,
+          nominal: data.nominal,
+          keterangan: data.keterangan,
+        })
+        .eq('id', id)
+      if (error) throw error
+    } catch (err: any) {
+      set({ expenses: prev, error: err.message })
+      throw err
+    }
+  },
+
+  // ── Delete Expense ──────────────────────────────────────────────────────
+  deleteExpense: async (id) => {
+    const prev = get().expenses
+    set(s => ({ expenses: s.expenses.filter(e => e.id !== id) }))
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+    } catch (err: any) {
+      set({ expenses: prev, error: err.message })
+      throw err
+    }
+  },
+
   // ── Init Store ────────────────────────────────────────────────────────────
   initStore: async () => {
     const saved = localStorage.getItem('otowash_user')
@@ -443,6 +578,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         get().fetchTransactions(),
         get().fetchStaff(),
         get().fetchVehicles(),
+        get().fetchExpenses(),
       ])
       set({ initialized: true })
     } catch (err) {
@@ -454,6 +590,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   subscribeRealtime: () => {
     const channel = supabase
       .channel('otowash-realtime')
+      // ── Transactions ──
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'transactions' },
@@ -485,6 +622,38 @@ export const useAppStore = create<AppStore>((set, get) => ({
           }))
         }
       )
+      // ── Expenses ──
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'expenses' },
+        (payload) => {
+          const newExp = payload.new as Expense
+          set(s => {
+            const exists = s.expenses.some(e => e.id === newExp.id)
+            if (exists) return s
+            return { expenses: [newExp, ...s.expenses] }
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'expenses' },
+        (payload) => {
+          const updated = payload.new as Expense
+          set(s => ({
+            expenses: s.expenses.map(e => (e.id === updated.id ? updated : e)),
+          }))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'expenses' },
+        (payload) => {
+          set(s => ({
+            expenses: s.expenses.filter(e => e.id !== payload.old.id),
+          }))
+        }
+      )
       .subscribe()
 
     return () => {
@@ -499,6 +668,7 @@ export const useTransactions = () => useAppStore(s => s.transactions)
 export const useStaff = () => useAppStore(s => s.staff)
 export const useVehicles = () => useAppStore(s => s.vehicles)
 export const useVehiclesDB = () => useAppStore(s => s.vehiclesDB)
+export const useExpenses = () => useAppStore(s => s.expenses)
 export const useLoading = () => useAppStore(s => s.loading)
 export const useError = () => useAppStore(s => s.error)
 export const useUser = () => useAppStore(s => s.user)

@@ -1,16 +1,54 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { useAppStore, useUser, useVehiclesDB } from '@/lib/Store'
+import { useAppStore, useUser, useVehiclesDB, useModelOptions } from '@/lib/Store'
 import Toast from '@/components/ui/Toast'
 import Guard from '@/components/auth/Guard'
 import type { Transaction } from '@/lib/Data'
 
-function fmtRupiah(n: number) {
+// ─── Safe formatter ──────────────────────────────────────────────────────
+function fmtRupiah(n?: number) {
+  if (n === undefined || n === null) return 'Rp 0'
   return 'Rp ' + n.toLocaleString('id-ID')
 }
 
-// ============ Custom Dropdown Component ============
+type LayananKey = 'expres' | 'hidrolik'
+type BayarKey = 'tunai' | 'qris' | 'transfer'
+
+const layananLabel: Record<LayananKey, string> = {
+  expres: 'Expres Wash',
+  hidrolik: 'Hidrolik Wash',
+}
+const bayarLabel: Record<BayarKey, string> = {
+  tunai: 'Tunai',
+  qris: 'QRIS',
+  transfer: 'Transfer',
+}
+
+// ─── Reverse mapping untuk edit modal ────────────────────────────────
+const layananKeyMap: Record<string, LayananKey> = {
+  'Expres Wash': 'expres',
+  'Hidrolik Wash': 'hidrolik',
+}
+
+const bayarKeyMap: Record<string, BayarKey> = {
+  Tunai: 'tunai',
+  QRIS: 'qris',
+  Transfer: 'transfer',
+}
+
+const layananItems: { key: LayananKey; label: string; sub: string }[] = [
+  { key: 'expres', label: 'Expres Wash', sub: 'Cuci cepat + kering' },
+  { key: 'hidrolik', label: 'Hidrolik Wash', sub: 'Cuci dengan hidrolik + poles' },
+]
+
+const bayarItems: { key: BayarKey; label: string; icon: string }[] = [
+  { key: 'tunai', label: 'Tunai', icon: 'payments' },
+  { key: 'qris', label: 'QRIS', icon: 'qr_code_scanner' },
+  { key: 'transfer', label: 'Transfer', icon: 'account_balance' },
+]
+
+// ============ Custom Dropdown ============
 interface DropdownProps {
   options: { value: string; label: string }[]
   value: string
@@ -72,7 +110,7 @@ function Dropdown({ options, value, onChange, placeholder = 'Pilih', className =
 
 // ============ Main Component ============
 function LaporanContent() {
-  const { transactions, updateTransactionStatus } = useAppStore()
+  const { transactions, updateTransactionStatus, updateTransaction } = useAppStore()
   const user = useUser()
   const vehiclesDB = useVehiclesDB()
   const isAdmin = user?.role === 'admin'
@@ -85,13 +123,121 @@ function LaporanContent() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'history' | 'report'>('history')
 
-  // Ambil daftar model unik dari database kendaraan
+  // ── State untuk modal edit ──────────────────────────────────────────────
+  const [editingTx, setEditingTx] = useState<Transaction & { id: string } | null>(null)
+  const [editVehicleType, setEditVehicleType] = useState<'mobil' | 'motor'>('mobil')
+  const [editPlate, setEditPlate] = useState('')
+  const [editModel, setEditModel] = useState('')
+  const [editType, setEditType] = useState('')
+  const [editLayanan, setEditLayanan] = useState<LayananKey>('expres')
+  const [editBayar, setEditBayar] = useState<BayarKey>('tunai')
+  const [editOperators, setEditOperators] = useState<string[]>([])
+  const [editDropdownOpen, setEditDropdownOpen] = useState(false)
+  const editDropdownRef = useRef<HTMLDivElement>(null)
+
+  // ── Ambil daftar staff ──────────────────────────────────────────────────
+  const allStaff = useAppStore(s => s.staff)
+  const operatorOptions = allStaff.filter(s => s.jabatan === 'Operator')
+
+  // ── Ambil model options berdasarkan tipe kendaraan yang dipilih di edit ──
+  const modelOptions = useModelOptions(editVehicleType)
+
+  // ── Hitung harga edit untuk setiap layanan ──────────────────────────────
+  const editPrices = useMemo(() => {
+    const v = vehiclesDB.find(v => v.name === editModel)
+    if (!v) {
+      return { expres: 0, hidrolik: 0 }
+    }
+    return {
+      expres: v.price_expres ?? 0,
+      hidrolik: v.price_hidrolik ?? 0,
+    }
+  }, [editModel, vehiclesDB])
+
+  // ── Fungsi buka modal ──────────────────────────────────────────────────
+  const openEditModal = (tx: Transaction & { id: string }) => {
+    setEditingTx(tx)
+    setEditVehicleType(tx.tipe)
+    setEditPlate(tx.plat)
+    setEditModel(tx.model)
+    setEditType(tx.type || '')
+
+    // ── Perbaikan: mapping dari nama display ke internal key ──
+    const layananKey = layananKeyMap[tx.layanan] || 'expres'
+    setEditLayanan(layananKey)
+
+    const bayarKey = bayarKeyMap[tx.bayar] || 'tunai'
+    setEditBayar(bayarKey)
+
+    setEditOperators(tx.karyawan.split(',').map(s => s.trim()).filter(Boolean))
+    setEditDropdownOpen(false)
+  }
+
+  // ── Fungsi simpan edit ────────────────────────────────────────────────
+  const handleSaveEdit = async () => {
+    if (!editingTx) return
+    if (!editModel) {
+      setToast({ visible: true, message: 'Pilih model kendaraan!', success: false })
+      return
+    }
+    if (editOperators.length === 0) {
+      setToast({ visible: true, message: 'Pilih minimal 1 operator!', success: false })
+      return
+    }
+
+    try {
+      await updateTransaction(editingTx.id, {
+        plat: editPlate || 'N/A',
+        model: editModel,
+        type: editType.trim() || undefined,
+        karyawan: editOperators.join(', '),
+        layanan: layananLabel[editLayanan] as any,
+        bayar: bayarLabel[editBayar] as any,
+        harga: editPrices[editLayanan],
+        tipe: editVehicleType,
+      })
+      setToast({ visible: true, message: 'Transaksi berhasil diupdate', success: true })
+      setEditingTx(null)
+    } catch {
+      setToast({ visible: true, message: 'Gagal update transaksi', success: false })
+    }
+  }
+
+  // ── Toggle operator ────────────────────────────────────────────────────
+  const toggleEditOperator = (name: string) => {
+    if (editVehicleType === 'motor') {
+      setEditOperators([name])
+      setEditDropdownOpen(false)
+    } else {
+      setEditOperators(prev =>
+        prev.includes(name)
+          ? prev.filter(op => op !== name)
+          : [...prev, name]
+      )
+    }
+  }
+
+  const clearEditOperators = () => {
+    setEditOperators([])
+  }
+
+  // ── Click outside untuk dropdown operator ────────────────────────────
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (editDropdownRef.current && !editDropdownRef.current.contains(event.target as Node)) {
+        setEditDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // ── Data untuk filter ──────────────────────────────────────────────────
   const allModels = useMemo(() => {
     return vehiclesDB.map(v => ({ name: v.name, type: v.tipe }))
   }, [vehiclesDB])
 
-  // Opsi model berdasarkan filter kendaraan
-  const modelOptions = useMemo(() => {
+  const modelOptionsFilter = useMemo(() => {
     const filtered = filterType === 'all'
       ? allModels
       : allModels.filter(m => m.type === filterType)
@@ -99,14 +245,13 @@ function LaporanContent() {
     return ['all', ...new Set(names)]
   }, [allModels, filterType])
 
-  // Opsi layanan unik dari transaksi
   const layananOptions = useMemo(() => {
     const unique = new Set(transactions.map(tx => tx.layanan).filter(Boolean))
     return ['all', ...Array.from(unique)]
   }, [transactions])
 
-  // Statistik
-  const totalPendapatan = useMemo(() => transactions.reduce((s, t) => s + t.harga, 0), [transactions])
+  // ── Statistik ──────────────────────────────────────────────────────────
+  const totalPendapatan = useMemo(() => transactions.reduce((s, t) => s + (t.harga || 0), 0), [transactions])
   const totalTransaksi = transactions.length
   const rataRata = totalTransaksi ? Math.round(totalPendapatan / totalTransaksi) : 0
 
@@ -131,7 +276,7 @@ function LaporanContent() {
         .map(name => name.trim())
         .filter(Boolean)
 
-      const bagian = tx.harga / operators.length
+      const bagian = (tx.harga || 0) / (operators.length || 1)
 
       operators.forEach(name => {
         if (!summary[name]) {
@@ -154,16 +299,16 @@ function LaporanContent() {
     transactions.forEach(tx => {
       if (tx.tipe === 'mobil') {
         res.mobil.count++
-        res.mobil.total += tx.harga
+        res.mobil.total += (tx.harga || 0)
       } else {
         res.motor.count++
-        res.motor.total += tx.harga
+        res.motor.total += (tx.harga || 0)
       }
     })
     return res
   }, [transactions])
 
-  // Filter transaksi
+  // ── Filter transaksi ──────────────────────────────────────────────────
   const filteredTx = useMemo(() => {
     return transactions.filter(tx => {
       if (filterType !== 'all' && tx.tipe !== filterType) return false
@@ -181,6 +326,7 @@ function LaporanContent() {
     })
   }, [transactions, filterType, filterModel, filterLayanan, search])
 
+  // ── Handle status ──────────────────────────────────────────────────────
   const handleAdvanceStatus = async (id: string, current: Transaction['status']) => {
     if (!isAdmin || current === 'Selesai') return
     const next = current === 'Menunggu' ? 'Proses' : 'Selesai'
@@ -195,7 +341,7 @@ function LaporanContent() {
     }
   }
 
-  // ============ EXPORT EXCEL DENGAN EXCELJS + KOLOM JENIS ============
+  // ── Export Excel ──────────────────────────────────────────────────────
   const exportToExcel = async () => {
     if (!isAdmin) return;
     if (transactions.length === 0) {
@@ -207,18 +353,15 @@ function LaporanContent() {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
 
-      // Helper untuk menambah sheet dengan styling keren
       const addStyledSheet = (data: Transaction[], sheetName: string) => {
         const ws = wb.addWorksheet(sheetName);
-
-        // Definisi kolom - sekarang ada kolom 'Jenis' (Mobil/Motor)
         ws.columns = [
           { header: 'No', key: 'no', width: 6 },
           { header: 'Tanggal', key: 'tanggal', width: 12 },
           { header: 'Jam', key: 'jam', width: 10 },
           { header: 'Plat', key: 'plat', width: 14 },
           { header: 'Model', key: 'model', width: 18 },
-          { header: 'Jenis', key: 'jenis', width: 10 },   // <--- KOLOM BARU
+          { header: 'Jenis', key: 'jenis', width: 10 },
           { header: 'Tipe/Merk', key: 'type', width: 16 },
           { header: 'Layanan', key: 'layanan', width: 18 },
           { header: 'Karyawan', key: 'karyawan', width: 18 },
@@ -227,7 +370,6 @@ function LaporanContent() {
           { header: 'Status', key: 'status', width: 12 },
         ];
 
-        // Style header
         const headerRow = ws.getRow(1);
         headerRow.eachCell((cell) => {
           cell.fill = {
@@ -245,7 +387,6 @@ function LaporanContent() {
           };
         });
 
-        // Isi data
         data.forEach((tx, idx) => {
           const row = ws.addRow({
             no: idx + 1,
@@ -253,16 +394,15 @@ function LaporanContent() {
             jam: formatTime(tx.waktu),
             plat: tx.plat,
             model: tx.model,
-            jenis: tx.tipe === 'mobil' ? 'Mobil' : 'Motor',  // <--- ISI JENIS
+            jenis: tx.tipe === 'mobil' ? 'Mobil' : 'Motor',
             type: tx.type ?? '',
             layanan: tx.layanan,
             karyawan: tx.karyawan,
             bayar: tx.bayar,
-            harga: tx.harga,
+            harga: tx.harga || 0,
             status: tx.status,
           });
 
-          // Warna selang-seling (zebra stripe)
           const rowIndex = row.number;
           if (rowIndex % 2 === 0) {
             row.eachCell((cell) => {
@@ -274,12 +414,10 @@ function LaporanContent() {
             });
           }
 
-          // Format rupiah di kolom harga (sekarang kolom ke-11)
           const hargaCell = row.getCell(11);
           hargaCell.numFmt = 'Rp #,##0';
           hargaCell.alignment = { horizontal: 'right' };
 
-          // Warna status (sekarang kolom ke-12)
           const statusCell = row.getCell(12);
           if (tx.status === 'Selesai') {
             statusCell.font = { color: { argb: 'FF059669' }, bold: true };
@@ -289,7 +427,6 @@ function LaporanContent() {
             statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
           }
 
-          // Border setiap cell
           row.eachCell((cell) => {
             cell.border = {
               top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
@@ -300,12 +437,11 @@ function LaporanContent() {
           });
         });
 
-        // Baris total
-        const totalHarga = data.reduce((sum, tx) => sum + tx.harga, 0);
+        const totalHarga = data.reduce((sum, tx) => sum + (tx.harga || 0), 0);
         const totalRow = ws.addRow([
           '', '', '', '', '', '', '', '', '', 'TOTAL', totalHarga, '',
         ]);
-        totalRow.getCell(11).numFmt = 'Rp #,##0'; // harga di kolom 11
+        totalRow.getCell(11).numFmt = 'Rp #,##0';
         totalRow.getCell(11).alignment = { horizontal: 'right' };
         totalRow.eachCell((cell) => {
           cell.font = { bold: true, size: 11 };
@@ -322,16 +458,13 @@ function LaporanContent() {
           };
         });
 
-        // Freeze baris pertama
         ws.views = [{ state: 'frozen', ySplit: 1 }];
-        // Auto filter (sesuaikan range: sekarang 12 kolom)
         ws.autoFilter = {
           from: { row: 1, column: 1 },
           to: { row: data.length + 1, column: 12 },
         };
       };
 
-      // Pisahkan data
       const mobilTx = transactions.filter(tx => tx.tipe === 'mobil');
       const motorTx = transactions.filter(tx => tx.tipe === 'motor');
 
@@ -339,7 +472,6 @@ function LaporanContent() {
       addStyledSheet(mobilTx, 'Mobil');
       addStyledSheet(motorTx, 'Motor');
 
-      // Simpan file
       const now = new Date();
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
@@ -393,7 +525,6 @@ function LaporanContent() {
     }).format(date)
   }
 
-  // helper untuk label opsi
   const typeOptions = [
     { value: 'all', label: 'Kendaraan' },
     { value: 'mobil', label: 'Mobil' },
@@ -402,7 +533,7 @@ function LaporanContent() {
 
   const modelOptionItems = [
     { value: 'all', label: 'Model' },
-    ...modelOptions.filter(m => m !== 'all').map(m => ({ value: m, label: m })),
+    ...modelOptionsFilter.filter(m => m !== 'all').map(m => ({ value: m, label: m })),
   ]
 
   const layananOptionItems = [
@@ -559,10 +690,9 @@ function LaporanContent() {
       ) : (
         /* ===== TAB RIWAYAT ===== */
         <>
-          {/* Filter Card - Modern dengan Custom Dropdown */}
+          {/* Filter Card */}
           <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Search */}
               <div className="relative flex-1 min-w-[140px]">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">
                   search
@@ -576,19 +706,17 @@ function LaporanContent() {
                 />
               </div>
 
-              {/* Dropdown Kendaraan */}
               <Dropdown
                 options={typeOptions}
                 value={filterType}
                 onChange={(val) => {
                   setFilterType(val as any)
-                  setFilterModel('all') // reset model saat ganti tipe
+                  setFilterModel('all')
                 }}
                 placeholder="Kendaraan"
                 className="flex-1 min-w-[100px]"
               />
 
-              {/* Dropdown Model */}
               <Dropdown
                 options={modelOptionItems}
                 value={filterModel}
@@ -597,7 +725,6 @@ function LaporanContent() {
                 className="flex-1 min-w-[100px]"
               />
 
-              {/* Dropdown Layanan */}
               <Dropdown
                 options={layananOptionItems}
                 value={filterLayanan}
@@ -606,7 +733,6 @@ function LaporanContent() {
                 className="flex-1 min-w-[100px]"
               />
 
-              {/* Reset Filter */}
               {hasActiveFilter && (
                 <button
                   onClick={resetFilters}
@@ -694,10 +820,20 @@ function LaporanContent() {
                               {updatingId === tx.id ? (
                                 <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                               ) : (
-                                <span className="material-symbols-outlined text-white text-[14px]">
+                                <span className="material-symbols-outlined text-white" style={{ fontSize: "14px" }}>
                                   arrow_forward_ios
                                 </span>
                               )}
+                            </button>
+                          )}
+                          {/* ─── TOMBOL EDIT ─── */}
+                          {isAdmin && (
+                            <button
+                              onClick={() => openEditModal(tx)}
+                              className="w-6 h-6 flex items-center justify-center rounded-full bg-yellow-400 hover:bg-yellow-500 active:scale-90 transition-all shadow-sm"
+                              title="Edit transaksi"
+                            >
+                              <span className="material-symbols-outlined text-white" style={{ fontSize: "14px" }}>edit</span>
                             </button>
                           )}
                         </div>
@@ -730,6 +866,273 @@ function LaporanContent() {
             )}
           </div>
         </>
+      )}
+
+      {/* ─── MODAL EDIT ────────────────────────────────────────────────── */}
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-surface-container-lowest border border-outline-variant rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-on-surface mb-5">Edit Transaksi</h3>
+
+            {/* Jenis Kendaraan */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Jenis Kendaraan</label>
+              <div className="grid grid-cols-2 gap-3 p-1 bg-surface-container rounded-2xl mt-1">
+                {(['mobil', 'motor'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setEditVehicleType(type)
+                      setEditModel('')
+                      setEditOperators([])
+                    }}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all ${
+                      editVehicleType === type ? 'bg-primary text-white shadow-md' : 'text-on-surface-variant hover:bg-surface-container-high'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">{type === 'mobil' ? 'directions_car' : 'motorcycle'}</span>
+                    {type === 'mobil' ? 'Mobil' : 'Motor'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Plat */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Nomor Plat</label>
+              <input
+                type="text"
+                placeholder="B 1234 XYZ"
+                value={editPlate}
+                onChange={e => setEditPlate(e.target.value.toUpperCase().slice(0, 10))}
+                className="w-full h-12 px-4 bg-surface-container-lowest border-2 border-outline-variant rounded-xl text-lg font-extrabold tracking-[0.05em] uppercase focus:border-primary transition-colors"
+              />
+            </div>
+
+            {/* Model */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Model</label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {modelOptions.length === 0 ? (
+                  <p className="text-sm text-on-surface-variant">Belum ada data model untuk tipe ini</p>
+                ) : (
+                  modelOptions.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setEditModel(m)}
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                        editModel === m
+                          ? 'bg-primary text-white shadow-md'
+                          : 'bg-surface-container border border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Tipe / Merk */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Tipe / Merk Kendaraan</label>
+              <input
+                type="text"
+                placeholder={editVehicleType === 'mobil' ? 'Contoh: Innova, Avanza' : 'Contoh: Scoopy, Vario'}
+                value={editType}
+                onChange={e => setEditType(e.target.value)}
+                maxLength={50}
+                className="w-full h-12 px-4 bg-surface-container-lowest border-2 border-outline-variant rounded-xl text-sm font-medium focus:border-primary transition-colors"
+              />
+            </div>
+
+            {/* Layanan — pilihan sebelumnya langsung terlihat */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Layanan</label>
+              {layananItems.map(item => (
+                <label
+                  key={item.key}
+                  className={`flex items-center gap-3 p-3 bg-surface-container-lowest border-2 rounded-xl cursor-pointer transition-colors mt-1 ${
+                    editLayanan === item.key ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-primary/40'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="edit-layanan"
+                    value={item.key}
+                    checked={editLayanan === item.key}
+                    onChange={() => setEditLayanan(item.key)}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-on-surface">{item.label}</p>
+                    <p className="text-xs text-on-surface-variant">{item.sub}</p>
+                  </div>
+                  <span className="text-sm font-bold text-primary">
+                    Rp {(editPrices[item.key] ?? 0).toLocaleString('id-ID')}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {/* Operator */}
+            <div className="mb-4" ref={editDropdownRef}>
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Operator</label>
+              {operatorOptions.length === 0 ? (
+                <div className="w-full h-12 px-4 bg-surface-container border-2 border-outline-variant rounded-xl text-sm font-medium flex items-center text-on-surface-variant mt-1">
+                  Belum ada operator terdaftar
+                </div>
+              ) : (
+                <div className="relative mt-1">
+                  <div
+                    onClick={() => setEditDropdownOpen(!editDropdownOpen)}
+                    className="w-full min-h-[52px] px-4 py-2 bg-surface-container-lowest border-2 rounded-xl cursor-pointer flex items-center flex-wrap gap-1.5 transition-colors border-outline-variant hover:border-primary/40"
+                  >
+                    {editOperators.length === 0 ? (
+                      <span className="text-on-surface-variant text-sm">Pilih operator...</span>
+                    ) : (
+                      <>
+                        {editOperators.map((op) => (
+                          <span
+                            key={op}
+                            className="inline-flex items-center gap-0.5 px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-sm font-medium"
+                          >
+                            {op}
+                            {editVehicleType === 'mobil' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleEditOperator(op)
+                                }}
+                                className="w-4 h-4 rounded-full hover:bg-primary/20 flex items-center justify-center text-primary"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">close</span>
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                        {editOperators.length > 1 && editVehicleType === 'mobil' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              clearEditOperators()
+                            }}
+                            className="text-xs text-on-surface-variant hover:text-error ml-1"
+                          >
+                            (hapus semua)
+                          </button>
+                        )}
+                      </>
+                    )}
+                    <span className="ml-auto text-on-surface-variant">
+                      <span className="material-symbols-outlined text-[20px]">
+                        {editDropdownOpen ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </span>
+                  </div>
+
+                  {editDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg max-h-60 overflow-y-auto py-1.5">
+                      {operatorOptions.map((op) => {
+                        const isChecked = editOperators.includes(op.nama)
+                        return (
+                          <label
+                            key={op.nama}
+                            className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container cursor-pointer transition-colors"
+                          >
+                            <input
+                              type={editVehicleType === 'motor' ? 'radio' : 'checkbox'}
+                              name={editVehicleType === 'motor' ? 'edit-operator' : undefined}
+                              checked={isChecked}
+                              onChange={() => toggleEditOperator(op.nama)}
+                              className="w-4 h-4 accent-primary"
+                            />
+                            <span className="text-sm font-medium text-on-surface">{op.nama}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-on-surface-variant">
+                  {editOperators.length === 0
+                    ? 'Belum ada operator dipilih'
+                    : `${editOperators.length} operator dipilih`}
+                </p>
+                <span className="text-xs text-primary font-medium bg-primary/10 px-2 py-0.5 rounded-full">
+                  {editVehicleType === 'motor' ? 'Pilih 1 operator' : 'Pilih banyak operator'}
+                </span>
+              </div>
+            </div>
+
+            {/* Metode Bayar */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Metode Bayar</label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {bayarItems.map(item => (
+                  <label
+                    key={item.key}
+                    className={`flex flex-col items-center gap-1.5 p-3 border-2 rounded-xl cursor-pointer text-center transition-colors ${
+                      editBayar === item.key ? 'bg-primary-container border-primary' : 'bg-surface-container-lowest border-outline-variant'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="edit-bayar"
+                      value={item.key}
+                      checked={editBayar === item.key}
+                      onChange={() => setEditBayar(item.key)}
+                      className="hidden"
+                    />
+                    <span className={`material-symbols-outlined text-[22px] ${editBayar === item.key ? 'text-primary icon-fill' : 'text-on-surface-variant'}`}>
+                      {item.icon}
+                    </span>
+                    <span className={`text-xs ${editBayar === item.key ? 'font-semibold text-primary' : 'font-medium text-on-surface-variant'}`}>
+                      {item.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Total */}
+            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 mb-5">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-on-surface-variant font-medium">Total</p>
+                  <h3 className="text-2xl font-extrabold text-primary mt-0.5">
+                    Rp {(editPrices[editLayanan] ?? 0).toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
+                  <span className="material-symbols-outlined text-white icon-fill">sell</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tombol aksi */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setEditingTx(null)}
+                className="flex-1 h-12 rounded-xl border border-outline-variant text-sm font-semibold text-on-surface-variant hover:bg-surface-container transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 h-12 rounded-xl bg-primary text-white text-sm font-semibold shadow-lg shadow-primary/20 active:scale-95 transition"
+              >
+                Simpan
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

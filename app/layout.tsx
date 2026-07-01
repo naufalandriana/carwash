@@ -7,6 +7,7 @@ import Headbar from '@/components/layout/Headbar'
 import Sidebar from '@/components/layout/Sidebar'
 import BottomNav from '@/components/layout/ButtomNav'
 import { StoreProvider } from '@/lib/StoreProvider'
+import { AlertProvider } from '@/components/ui/Alert'   // ⬅️ TAMBAH
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -18,13 +19,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-        {/* PWA & Fullscreen */}
         <meta name="theme-color" content="#004ac6" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-title" content="Cahaya Wash" />
-        <title>Cahaya Car & Bike Wash</title>
+        <title>Cahaya Steam Car & Bike Wash</title>
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
           rel="stylesheet"
@@ -36,20 +36,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-background text-on-surface min-h-screen">
         <StoreProvider>
-          {isLoginPage ? (
-            <main className="min-h-screen">{children}</main>
-          ) : (
-            <div className="flex flex-col min-h-screen">
-              <Headbar onMenuClick={() => setDrawerOpen(true)} />
-              <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-              <main className="flex-1 px-4 py-4 pb-20 lg:pb-4">
-                {children}
-              </main>
-              <div className="lg:hidden">
-                <BottomNav />
+          <AlertProvider>  {/* ⬅️ BUNGKUS DENGAN ALERT PROVIDER */}
+            {isLoginPage ? (
+              <main className="min-h-screen">{children}</main>
+            ) : (
+              <div className="flex flex-col min-h-screen">
+                <Headbar onMenuClick={() => setDrawerOpen(true)} />
+                <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+                <main className="flex-1 p-4 pb-20 lg:pb-4">
+                  {children}
+                </main>
+                <div className="lg:hidden">
+                  <BottomNav />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </AlertProvider>
         </StoreProvider>
       </body>
     </html>
