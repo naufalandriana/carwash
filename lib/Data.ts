@@ -9,6 +9,7 @@ export type TransactionStatus = typeof TransactionStatuses[number];
 export interface Transaction {
   plat: string
   model: string
+  type?: string
   karyawan: string
   layanan: Layanan
   bayar: Bayar

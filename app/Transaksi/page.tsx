@@ -64,6 +64,7 @@ export default function TransaksiPage() {
 
   const [plateRaw, setPlateRaw] = useState('')
   const [model, setModel] = useState('')
+  const [typeInput, setTypeInput] = useState('')
   const [layanan, setLayanan] = useState<LayananKey>('expres')
   const [selectedOperators, setSelectedOperators] = useState<string[]>([])
   const [bayar, setBayar] = useState<BayarKey>('tunai')
@@ -81,6 +82,7 @@ export default function TransaksiPage() {
   const resetForm = () => {
     setPlateRaw('')
     setModel('')
+    setTypeInput('')
     setSelectedOperators([])
     setLayanan('expres')
     setBayar('tunai')
@@ -150,6 +152,7 @@ export default function TransaksiPage() {
       await addTransaction({
         plat: formatPlate(plateRaw) || 'N/A',
         model,
+        type: typeInput.trim() || undefined,
         karyawan: karyawanStr,
         layanan: layananLabel[layanan] as any,
         bayar: bayarLabel[bayar] as any,
@@ -231,7 +234,7 @@ export default function TransaksiPage() {
           />
         </div>
 
-        {/* Model */}
+        {/* Model (kategori harga) */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Model</label>
           <div className="flex flex-wrap gap-2">
@@ -254,6 +257,22 @@ export default function TransaksiPage() {
               ))
             )}
           </div>
+        </div>
+
+        {/* Tipe / Merk Kendaraan (free text) */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
+            Tipe / Merk Kendaraan
+          </label>
+          <input
+            type="text"
+            placeholder={vehicleType === 'mobil' ? 'Contoh: Innova, Avanza, Xpander' : 'Contoh: Scoopy, Vario, NMAX'}
+            value={typeInput}
+            onChange={e => setTypeInput(e.target.value)}
+            disabled={isGuest}
+            maxLength={50}
+            className="w-full h-12 px-4 bg-surface-container-lowest border-2 border-outline-variant rounded-xl text-sm font-medium focus:border-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          />
         </div>
 
         {/* Layanan */}

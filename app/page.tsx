@@ -233,12 +233,14 @@ function TrendChart({ dataset }: { dataset: ChartDataset }) {
 function DashboardContent() {
   const { transactions, updateTransactionStatus } = useAppStore()
   const user = useUser()
+  const isGuest = user?.role === 'guest'
   const [range, setRange] = useState<'week' | 'month'>('week')
 
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   // handle status update
 
   const handleFinish = async (id: string) => {
+    if (isGuest) return
     setUpdatingId(id)
 
     try {
@@ -303,6 +305,7 @@ function DashboardContent() {
     iconClass: tx.status === 'Selesai' ? 'text-green-600' : 'text-primary',
     bg: tx.status === 'Selesai' ? 'bg-green-50' : 'bg-secondary-container',
     title: `${tx.model} ${tx.status === 'Selesai' ? 'selesai' : 'diproses'}`,
+    type: tx.type || null,
     sub: `${formatTimeWIB((tx as any).createdAt)} · ${tx.karyawan.split(' ')[0]} · ${fmtRupiah(tx.harga)}`,
   }))
 
@@ -361,9 +364,11 @@ function DashboardContent() {
         <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-medium text-on-surface">Antrian aktif</h4>
-            <Link href="/Transaksi" className="text-xs font-medium text-primary flex items-center gap-0.5">
-              <span className="material-symbols-outlined text-[14px]">add</span> Tambah
-            </Link>
+            {!isGuest && (
+              <Link href="/Transaksi" className="text-xs font-medium text-primary flex items-center gap-0.5">
+                <span className="material-symbols-outlined text-[14px]">add</span> Tambah
+              </Link>
+            )}
           </div>
           <div className="divide-y divide-outline-variant">
             {queueTxs.length === 0 ? (
@@ -398,6 +403,11 @@ function DashboardContent() {
                     <p className="text-sm font-medium text-on-surface truncate">
                       {tx.plat} · {tx.model}
                     </p>
+                    {tx.type && (
+                      <p className="text-xs text-primary font-medium truncate">
+                        · {tx.type}
+                      </p>
+                    )}
                     <p className="text-xs text-on-surface-variant">
                       {tx.karyawan.split(' ')[0]} ·{' '}
                       {formatTimeWIB((tx as any).createdAt)}
@@ -406,20 +416,22 @@ function DashboardContent() {
 
                   <div className="flex items-center gap-2">
                     <Badge status={tx.status} />
-                    <button
-                      onClick={() => handleFinish(tx.id)}
-                      disabled={updatingId === tx.id}
-                      className="w-6 h-6 flex items-center justify-center rounded-full bg-primary hover:bg-primary-dark active:scale-90 transition-all disabled:opacity-50"
-                      title="Tandai selesai"
-                    >
-                      {updatingId === tx.id ? (
-                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <span className="material-symbols-outlined text-white text-[14px]">
-                          arrow_forward_ios
-                        </span>
-                      )}
-                    </button>
+                    {!isGuest && (
+                      <button
+                        onClick={() => handleFinish(tx.id)}
+                        disabled={updatingId === tx.id}
+                        className="w-6 h-6 flex items-center justify-center rounded-full bg-primary hover:bg-primary-dark active:scale-90 transition-all disabled:opacity-50"
+                        title="Tandai selesai"
+                      >
+                        {updatingId === tx.id ? (
+                          <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <span className="material-symbols-outlined text-white text-[14px]">
+                            arrow_forward_ios
+                          </span>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
                 ))
@@ -463,6 +475,9 @@ function DashboardContent() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-on-surface">{act.title}</p>
+                  {act.type && (
+                    <p className="text-xs text-primary font-medium">· {act.type}</p>
+                  )}
                   <p className="text-xs text-on-surface-variant">{act.sub}</p>
                 </div>
               </div>

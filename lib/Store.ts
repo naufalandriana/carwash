@@ -7,23 +7,20 @@ import type { Transaction, StaffMember, Vehicle } from './Data'
 export interface User {
   role: 'admin' | 'guest'
   name?: string
+  id?: string
+  username?: string
 }
 
 // ─── Helpers: DB → App types ──────────────────────────────────────────────
 
-// App hanya menggunakan 'Proses' dan 'Selesai'
-// DB diharapkan menerima 'Proses' dan 'Selesai' (atau juga 'Antre' untuk data lama)
 function mapDBStatusToApp(status: DBTransaction['status']): Transaction['status'] {
-  // Jika DB masih ada 'Antre', kita ubah jadi 'Proses' untuk konsistensi
   if (status === 'Antre') return 'Proses'
   return status as Transaction['status']
 }
 
 function mapAppStatusToDB(status: Transaction['status']): DBTransaction['status'] {
-  // App hanya kirim 'Proses' atau 'Selesai'
   if (status === 'Proses') return 'Proses'
   if (status === 'Selesai') return 'Selesai'
-  // fallback
   return status as DBTransaction['status']
 }
 
@@ -32,6 +29,7 @@ function toAppTransaction(db: DBTransaction): Transaction & { id: string } {
     id: db.id,
     plat: db.plat,
     model: db.model,
+    type: db.type ?? undefined,
     karyawan: db.karyawan,
     layanan: db.layanan as Transaction['layanan'],
     bayar: db.bayar,
@@ -43,8 +41,9 @@ function toAppTransaction(db: DBTransaction): Transaction & { id: string } {
   }
 }
 
-function toAppStaff(db: DBStaff): StaffMember {
+function toAppStaff(db: DBStaff): StaffMember & { id: string } {
   return {
+    id: db.id,
     nama: db.nama,
     jabatan: db.jabatan,
     initials: db.initials,
@@ -73,7 +72,7 @@ interface LoadingState {
 
 interface AppStore {
   transactions: (Transaction & { id: string })[]
-  staff: StaffMember[]
+  staff: (StaffMember & { id: string })[]
   vehicles: Vehicle[]
   vehiclesDB: DBVehicle[]
 
@@ -84,6 +83,7 @@ interface AppStore {
   user: User | null
   login: (user: User) => void
   logout: () => void
+  authenticateAdmin: (password: string) => Promise<void>
 
   fetchTransactions: () => Promise<void>
   addTransaction: (tx: Omit<Transaction, 'waktu' | 'createdAt'>) => Promise<void>
@@ -92,6 +92,8 @@ interface AppStore {
 
   fetchStaff: () => Promise<void>
   addStaff: (staff: Omit<DBStaff, 'id' | 'created_at'>) => Promise<void>
+  updateStaff: (id: string, updates: Partial<Pick<DBStaff, 'nama' | 'initials'>>) => Promise<void>
+  deleteStaff: (id: string) => Promise<void>
 
   fetchVehicles: () => Promise<void>
   addVehicle: (vehicle: Omit<DBVehicle, 'id' | 'created_at'>) => Promise<void>
@@ -133,6 +135,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
     localStorage.removeItem('otowash_user')
   },
 
+  // ── Authenticate Admin dengan password saja ────────────────────────────────
+  authenticateAdmin: async (password: string) => {
+    set({ error: null })
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        set({ error: data.error || 'Login gagal' })
+        throw new Error(data.error || 'Login gagal')
+      }
+
+      // Login ke store dengan data dari API
+      get().login({
+        role: 'admin',
+        name: data.user.name,
+        id: data.user.id,
+        username: data.user.username
+      })
+    } catch (err: any) {
+      set({ error: err.message })
+      throw err
+    }
+  },
+
   clearError: () => set({ error: null }),
 
   // ── Fetch Transactions ───────────────────────────────────────────────────
@@ -167,7 +199,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set(s => ({ transactions: [optimistic, ...s.transactions] }))
 
     try {
-      // ✅ Mapping status ke value yang valid di DB
       const dbStatus = mapAppStatusToDB(tx.status)
 
       const { data, error } = await supabase
@@ -175,11 +206,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .insert({
           plat: tx.plat,
           model: tx.model,
+          type: tx.type || null,
           karyawan: tx.karyawan,
           layanan: tx.layanan,
           bayar: tx.bayar,
           harga: tx.harga,
-          status: dbStatus,   // ✅ sekarang 'Proses' atau 'Selesai'
+          status: dbStatus,
           tipe: tx.tipe,
         })
         .select()
@@ -270,6 +302,40 @@ export const useAppStore = create<AppStore>((set, get) => ({
       await get().fetchStaff()
     } catch (err: any) {
       set({ error: err.message })
+    }
+  },
+
+  // ── Update Staff (edit nama, dll) ────────────────────────────────────────
+  updateStaff: async (id, updates) => {
+    const prev = get().staff
+    set(s => ({
+      staff: s.staff.map(st => (st.id === id ? { ...st, ...updates } : st)),
+    }))
+    try {
+      const { error } = await supabase
+        .from('staff')
+        .update(updates)
+        .eq('id', id)
+      if (error) throw error
+    } catch (err: any) {
+      set({ staff: prev, error: err.message })
+      throw err
+    }
+  },
+
+  // ── Delete Staff ──────────────────────────────────────────────────────────
+  deleteStaff: async (id) => {
+    const prev = get().staff
+    set(s => ({ staff: s.staff.filter(st => st.id !== id) }))
+    try {
+      const { error } = await supabase
+        .from('staff')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+    } catch (err: any) {
+      set({ staff: prev, error: err.message })
+      throw err
     }
   },
 

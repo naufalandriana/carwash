@@ -15,6 +15,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // ─── Tipe yang sesuai dengan tabel di Supabase ──────────────────────────────
 
 export interface DBTransaction {
+  type: undefined
   id: string
   plat: string
   model: string

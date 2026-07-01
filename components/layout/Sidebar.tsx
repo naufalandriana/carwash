@@ -49,7 +49,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-black text-[16px] text-primary tracking-tight leading-none">
-                Cahaya
+                Cahaya Steam
               </span>
               <span className="font-medium text-[10px] text-on-surface-variant tracking-wide leading-none mt-0.5">
                 Car &amp; Bike Wash

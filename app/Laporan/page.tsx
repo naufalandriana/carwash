@@ -10,28 +10,6 @@ function fmtRupiah(n: number) {
   return 'Rp ' + n.toLocaleString('id-ID')
 }
 
-// Format WIB lengkap (dipakai untuk export Excel)
-function formatWIB(dateStr: string): string {
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return dateStr
-
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: 'Asia/Jakarta',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }
-
-  const parts = new Intl.DateTimeFormat('id-ID', options).formatToParts(date)
-  const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]))
-
-  return `${partMap.day}/${partMap.month}/${partMap.year} ${partMap.hour}:${partMap.minute}:${partMap.second} WIB`
-}
-
 // ============ Custom Dropdown Component ============
 interface DropdownProps {
   options: { value: string; label: string }[]
@@ -193,7 +171,11 @@ function LaporanContent() {
       if (filterLayanan !== 'all' && tx.layanan !== filterLayanan) return false
       if (search.trim()) {
         const q = search.toLowerCase()
-        return tx.plat.toLowerCase().includes(q) || tx.model.toLowerCase().includes(q)
+        return (
+          tx.plat.toLowerCase().includes(q) ||
+          tx.model.toLowerCase().includes(q) ||
+          (tx.type ?? '').toLowerCase().includes(q)
+        )
       }
       return true
     })
@@ -213,30 +195,169 @@ function LaporanContent() {
     }
   }
 
+  // ============ EXPORT EXCEL DENGAN EXCELJS + KOLOM JENIS ============
   const exportToExcel = async () => {
-    if (!isAdmin) return
+    if (!isAdmin) return;
     if (transactions.length === 0) {
-      setToast({ visible: true, message: 'Tidak ada data!', success: false })
-      return
+      setToast({ visible: true, message: 'Tidak ada data!', success: false });
+      return;
     }
+
     try {
-      const XLSX = await import('xlsx')
-      const now = new Date()
-      const rows: (string | number)[][] = [
-        ['No', 'Waktu (WIB)', 'Plat', 'Model', 'Layanan', 'Karyawan', 'Metode Bayar', 'Harga (Rp)', 'Status'],
-        ...transactions.map((tx, i) => [i + 1, formatWIB(tx.waktu ?? ''), tx.plat, tx.model, tx.layanan, tx.karyawan, tx.bayar, tx.harga, tx.status]),
-        ['', '', '', '', '', '', 'TOTAL', totalPendapatan, ''],
-      ]
-      const wb = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet(rows)
-      ws['!cols'] = [6, 22, 14, 18, 18, 18, 14, 16, 12].map(wch => ({ wch }))
-      XLSX.utils.book_append_sheet(wb, ws, 'Laporan')
-      XLSX.writeFile(wb, `Laporan_CahayaWash_${now.toISOString().slice(0, 10)}.xlsx`)
-      setToast({ visible: true, message: 'Laporan berhasil diekspor!', success: true })
-    } catch {
-      setToast({ visible: true, message: 'Gagal mengekspor laporan!', success: false })
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+
+      // Helper untuk menambah sheet dengan styling keren
+      const addStyledSheet = (data: Transaction[], sheetName: string) => {
+        const ws = wb.addWorksheet(sheetName);
+
+        // Definisi kolom - sekarang ada kolom 'Jenis' (Mobil/Motor)
+        ws.columns = [
+          { header: 'No', key: 'no', width: 6 },
+          { header: 'Tanggal', key: 'tanggal', width: 12 },
+          { header: 'Jam', key: 'jam', width: 10 },
+          { header: 'Plat', key: 'plat', width: 14 },
+          { header: 'Model', key: 'model', width: 18 },
+          { header: 'Jenis', key: 'jenis', width: 10 },   // <--- KOLOM BARU
+          { header: 'Tipe/Merk', key: 'type', width: 16 },
+          { header: 'Layanan', key: 'layanan', width: 18 },
+          { header: 'Karyawan', key: 'karyawan', width: 18 },
+          { header: 'Metode Bayar', key: 'bayar', width: 14 },
+          { header: 'Harga (Rp)', key: 'harga', width: 16 },
+          { header: 'Status', key: 'status', width: 12 },
+        ];
+
+        // Style header
+        const headerRow = ws.getRow(1);
+        headerRow.eachCell((cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1E3A8A' },
+          };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          };
+        });
+
+        // Isi data
+        data.forEach((tx, idx) => {
+          const row = ws.addRow({
+            no: idx + 1,
+            tanggal: formatDate(tx.waktu),
+            jam: formatTime(tx.waktu),
+            plat: tx.plat,
+            model: tx.model,
+            jenis: tx.tipe === 'mobil' ? 'Mobil' : 'Motor',  // <--- ISI JENIS
+            type: tx.type ?? '',
+            layanan: tx.layanan,
+            karyawan: tx.karyawan,
+            bayar: tx.bayar,
+            harga: tx.harga,
+            status: tx.status,
+          });
+
+          // Warna selang-seling (zebra stripe)
+          const rowIndex = row.number;
+          if (rowIndex % 2 === 0) {
+            row.eachCell((cell) => {
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFF3F4F6' },
+              };
+            });
+          }
+
+          // Format rupiah di kolom harga (sekarang kolom ke-11)
+          const hargaCell = row.getCell(11);
+          hargaCell.numFmt = 'Rp #,##0';
+          hargaCell.alignment = { horizontal: 'right' };
+
+          // Warna status (sekarang kolom ke-12)
+          const statusCell = row.getCell(12);
+          if (tx.status === 'Selesai') {
+            statusCell.font = { color: { argb: 'FF059669' }, bold: true };
+          } else if (tx.status === 'Proses') {
+            statusCell.font = { color: { argb: 'FFD97706' }, bold: true };
+          } else {
+            statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+          }
+
+          // Border setiap cell
+          row.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+              left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+              bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+              right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+            };
+          });
+        });
+
+        // Baris total
+        const totalHarga = data.reduce((sum, tx) => sum + tx.harga, 0);
+        const totalRow = ws.addRow([
+          '', '', '', '', '', '', '', '', '', 'TOTAL', totalHarga, '',
+        ]);
+        totalRow.getCell(11).numFmt = 'Rp #,##0'; // harga di kolom 11
+        totalRow.getCell(11).alignment = { horizontal: 'right' };
+        totalRow.eachCell((cell) => {
+          cell.font = { bold: true, size: 11 };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E7FF' },
+          };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+            left: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+            bottom: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+            right: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+          };
+        });
+
+        // Freeze baris pertama
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+        // Auto filter (sesuaikan range: sekarang 12 kolom)
+        ws.autoFilter = {
+          from: { row: 1, column: 1 },
+          to: { row: data.length + 1, column: 12 },
+        };
+      };
+
+      // Pisahkan data
+      const mobilTx = transactions.filter(tx => tx.tipe === 'mobil');
+      const motorTx = transactions.filter(tx => tx.tipe === 'motor');
+
+      addStyledSheet(transactions, 'Semua');
+      addStyledSheet(mobilTx, 'Mobil');
+      addStyledSheet(motorTx, 'Motor');
+
+      // Simpan file
+      const now = new Date();
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Laporan_CahayaWash_${now.toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+
+      setToast({ visible: true, message: 'Laporan berhasil diekspor!', success: true });
+    } catch (err) {
+      console.error(err);
+      setToast({ visible: true, message: 'Gagal mengekspor laporan!', success: false });
     }
-  }
+  };
 
   const hasActiveFilter = search !== '' || filterType !== 'all' || filterModel !== 'all' || filterLayanan !== 'all'
 
@@ -448,7 +569,7 @@ function LaporanContent() {
                 </span>
                 <input
                   type="text"
-                  placeholder="Cari plat atau model..."
+                  placeholder="Cari plat, model, atau tipe..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full h-9 pl-9 pr-3 bg-surface-container border border-outline-variant rounded-full text-sm focus:border-primary outline-none transition-all"
@@ -535,7 +656,12 @@ function LaporanContent() {
                         </div>
                         <div>
                           <p className="text-sm font-bold text-on-surface">{tx.plat}</p>
-                          <p className="text-xs text-on-surface-variant">{tx.model}</p>
+                          <p className="text-xs text-on-surface-variant">
+                            {tx.model}
+                            {tx.type && (
+                              <span className="text-on-surface-variant/70"> · {tx.type}</span>
+                            )}
+                          </p>
                         </div>
                       </div>
 
