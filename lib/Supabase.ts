@@ -15,12 +15,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // ─── Tipe yang sesuai dengan tabel di Supabase ──────────────────────────────
 
 export interface DBTransaction {
-  type: undefined
   id: string
   plat: string
   model: string
+  type: string | null          // ✅ FIX: ini sebelumnya `undefined`
   karyawan: string
-  layanan: 'Expres Wash' | 'Hidrolik Wash'  // sudah diperbarui
+  layanan: 'Expres Wash' | 'Hidrolik Wash'
   bayar: 'Tunai' | 'QRIS' | 'Transfer'
   harga: number
   status: 'Selesai' | 'Proses' | 'Antre'

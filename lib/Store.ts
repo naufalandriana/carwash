@@ -93,6 +93,12 @@ interface AppStore {
   updateTransaction: (id: string, updates: Partial<Omit<Transaction, 'id' | 'waktu' | 'createdAt'>>) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
 
+  // ── Report: fetch semua transaksi dengan rentang tanggal (tanpa limit) ──
+  fetchReportTransactions: (from?: string, to?: string) => Promise<(Transaction & { id: string })[]>
+
+  // ── Report: ambil tanggal transaksi tertua & terbaru (untuk daftar bulan) ──
+  fetchTransactionDateRange: () => Promise<{ oldest: string; newest: string } | null>
+
   fetchStaff: () => Promise<void>
   addStaff: (staff: Omit<DBStaff, 'id' | 'created_at'>) => Promise<void>
   updateStaff: (id: string, updates: Partial<Pick<DBStaff, 'nama' | 'initials'>>) => Promise<void>
@@ -105,7 +111,7 @@ interface AppStore {
   // ── Expense methods ──
   fetchExpenses: () => Promise<void>
   addExpense: (data: Omit<Expense, 'id' | 'created_at'>) => Promise<void>
-  updateExpense: (id: string, data: Partial<Omit<Expense, 'id' | 'created_at'>>) => Promise<void>  // ⬅️ TAMBAH
+  updateExpense: (id: string, data: Partial<Omit<Expense, 'id' | 'created_at'>>) => Promise<void>
   deleteExpense: (id: string) => Promise<void>
 
   initStore: () => Promise<void>
@@ -157,7 +163,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ password }),
       })
 
       const data = await response.json()
@@ -171,7 +177,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         role: 'admin',
         name: data.user.name,
         id: data.user.id,
-        username: data.user.username
+        username: data.user.username,
       })
     } catch (err: any) {
       set({ error: err.message })
@@ -181,9 +187,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  // ── Fetch Transactions ───────────────────────────────────────────────────
+  // ── Fetch Transactions (default, untuk riwayat live) ────────────────────
   fetchTransactions: async () => {
-    set(s => ({ loading: { ...s.loading, transactions: true }, error: null }))
+    set((s) => ({ loading: { ...s.loading, transactions: true }, error: null }))
     try {
       const { data, error } = await supabase
         .from('transactions')
@@ -196,7 +202,57 @@ export const useAppStore = create<AppStore>((set, get) => ({
         loading: { ...get().loading, transactions: false },
       })
     } catch (err: any) {
-      set(s => ({ error: err.message, loading: { ...s.loading, transactions: false } }))
+      set((s) => ({ error: err.message, loading: { ...s.loading, transactions: false } }))
+    }
+  },
+
+  // ── Report: fetch SEMUA transaksi dengan rentang tanggal (no limit) ─────
+  fetchReportTransactions: async (from, to) => {
+    try {
+      let query = supabase
+        .from('transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (from) {
+        // from = 'YYYY-MM-DD' → mulai 00:00:00 WIB (+07:00)
+        query = query.gte('created_at', `${from}T00:00:00+07:00`)
+      }
+      if (to) {
+        // to = 'YYYY-MM-DD' → sampai 23:59:59.999 WIB (+07:00)
+        query = query.lte('created_at', `${to}T23:59:59.999+07:00`)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      return (data as DBTransaction[]).map(toAppTransaction)
+    } catch (err: any) {
+      set({ error: err.message })
+      throw err
+    }
+  },
+
+  // ── Report: ambil rentang tanggal transaksi tertua & terbaru ────────────
+  // Dipakai untuk membangun daftar bulan yang tersedia di dropdown "Bulan Ini",
+  // supaya dropdown cuma menampilkan bulan yang benar-benar ada datanya di DB.
+  fetchTransactionDateRange: async () => {
+    try {
+      const [oldestRes, newestRes] = await Promise.all([
+        supabase.from('transactions').select('created_at').order('created_at', { ascending: true }).limit(1),
+        supabase.from('transactions').select('created_at').order('created_at', { ascending: false }).limit(1),
+      ])
+      if (oldestRes.error) throw oldestRes.error
+      if (newestRes.error) throw newestRes.error
+
+      const oldest = oldestRes.data?.[0]?.created_at
+      const newest = newestRes.data?.[0]?.created_at
+      if (!oldest || !newest) return null
+
+      return { oldest, newest }
+    } catch (err: any) {
+      set({ error: err.message })
+      return null
     }
   },
 
@@ -210,7 +266,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       waktu: nowIso,
       createdAt: nowIso,
     }
-    set(s => ({ transactions: [optimistic, ...s.transactions] }))
+    set((s) => ({ transactions: [optimistic, ...s.transactions] }))
 
     try {
       const dbStatus = mapAppStatusToDB(tx.status)
@@ -232,14 +288,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .single()
       if (error) throw error
 
-      set(s => ({
-        transactions: s.transactions.map(t =>
+      set((s) => ({
+        transactions: s.transactions.map((t) =>
           t.id === tempId ? toAppTransaction(data as DBTransaction) : t
         ),
       }))
     } catch (err: any) {
-      set(s => ({
-        transactions: s.transactions.filter(t => t.id !== tempId),
+      set((s) => ({
+        transactions: s.transactions.filter((t) => t.id !== tempId),
         error: err.message,
       }))
       throw err
@@ -249,8 +305,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // ── Update Transaction Status ────────────────────────────────────────────
   updateTransactionStatus: async (id, status) => {
     const prev = get().transactions
-    set(s => ({
-      transactions: s.transactions.map(t => (t.id === id ? { ...t, status } : t)),
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? { ...t, status } : t)),
     }))
     try {
       const dbStatus = mapAppStatusToDB(status)
@@ -267,10 +323,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // ── UPDATE TRANSACTION (FULL EDIT) ──────────────────────────────────────
   updateTransaction: async (id, updates) => {
     const prev = get().transactions
-    set(s => ({
-      transactions: s.transactions.map(t =>
-        t.id === id ? { ...t, ...updates } : t
-      ),
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? { ...t, ...updates } : t)),
     }))
     try {
       const dbUpdates: any = { ...updates }
@@ -291,7 +345,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // ── Delete Transaction ──────────────────────────────────────────────────
   deleteTransaction: async (id) => {
     const prev = get().transactions
-    set(s => ({ transactions: s.transactions.filter(t => t.id !== id) }))
+    set((s) => ({ transactions: s.transactions.filter((t) => t.id !== id) }))
     try {
       const { error } = await supabase
         .from('transactions')
@@ -305,7 +359,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // ── Fetch Staff ──────────────────────────────────────────────────────────
   fetchStaff: async () => {
-    set(s => ({ loading: { ...s.loading, staff: true } }))
+    set((s) => ({ loading: { ...s.loading, staff: true } }))
     try {
       const { data, error } = await supabase
         .from('staff')
@@ -318,7 +372,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         loading: { ...get().loading, staff: false },
       })
     } catch (err: any) {
-      set(s => ({ error: err.message, loading: { ...s.loading, staff: false } }))
+      set((s) => ({ error: err.message, loading: { ...s.loading, staff: false } }))
     }
   },
 
@@ -346,8 +400,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // ── Update Staff (edit nama, dll) ────────────────────────────────────────
   updateStaff: async (id, updates) => {
     const prev = get().staff
-    set(s => ({
-      staff: s.staff.map(st => (st.id === id ? { ...st, ...updates } : st)),
+    set((s) => ({
+      staff: s.staff.map((st) => (st.id === id ? { ...st, ...updates } : st)),
     }))
     try {
       const { error } = await supabase
@@ -364,7 +418,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // ── Delete Staff ──────────────────────────────────────────────────────────
   deleteStaff: async (id) => {
     const prev = get().staff
-    set(s => ({ staff: s.staff.filter(st => st.id !== id) }))
+    set((s) => ({ staff: s.staff.filter((st) => st.id !== id) }))
     try {
       const { error } = await supabase
         .from('staff')
@@ -379,7 +433,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // ── Fetch Vehicles ───────────────────────────────────────────────────────
   fetchVehicles: async () => {
-    set(s => ({ loading: { ...s.loading, vehicles: true } }))
+    set((s) => ({ loading: { ...s.loading, vehicles: true } }))
     try {
       const { data, error } = await supabase
         .from('vehicles')
@@ -393,7 +447,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         loading: { ...get().loading, vehicles: false },
       })
     } catch (err: any) {
-      set(s => ({ error: err.message, loading: { ...s.loading, vehicles: false } }))
+      set((s) => ({ error: err.message, loading: { ...s.loading, vehicles: false } }))
     }
   },
 
@@ -410,7 +464,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       id: tempId,
       created_at: new Date().toISOString(),
     }
-    set(s => ({
+    set((s) => ({
       vehicles: [...s.vehicles, optimisticVehicle],
       vehiclesDB: [...s.vehiclesDB, optimisticDBVehicle],
     }))
@@ -427,14 +481,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .single()
       if (error) throw error
       const real = data as DBVehicle
-      set(s => ({
-        vehicles: s.vehicles.map(v => (v.id === tempId ? toAppVehicle(real) : v)),
-        vehiclesDB: s.vehiclesDB.map(v => (v.id === tempId ? real : v)),
+      set((s) => ({
+        vehicles: s.vehicles.map((v) => (v.id === tempId ? toAppVehicle(real) : v)),
+        vehiclesDB: s.vehiclesDB.map((v) => (v.id === tempId ? real : v)),
       }))
     } catch (err: any) {
-      set(s => ({
-        vehicles: s.vehicles.filter(v => v.id !== tempId),
-        vehiclesDB: s.vehiclesDB.filter(v => v.id !== tempId),
+      set((s) => ({
+        vehicles: s.vehicles.filter((v) => v.id !== tempId),
+        vehiclesDB: s.vehiclesDB.filter((v) => v.id !== tempId),
         error: err.message,
       }))
     }
@@ -444,9 +498,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   deleteVehicle: async (id) => {
     const prevVehicles = get().vehicles
     const prevVehiclesDB = get().vehiclesDB
-    set(s => ({
-      vehicles: s.vehicles.filter(v => v.id !== id),
-      vehiclesDB: s.vehiclesDB.filter(v => v.id !== id),
+    set((s) => ({
+      vehicles: s.vehicles.filter((v) => v.id !== id),
+      vehiclesDB: s.vehiclesDB.filter((v) => v.id !== id),
     }))
     try {
       const { error } = await supabase
@@ -469,7 +523,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // ── Fetch Expenses ──────────────────────────────────────────────────────
   fetchExpenses: async () => {
-    set(s => ({ loading: { ...s.loading, expenses: true }, error: null }))
+    set((s) => ({ loading: { ...s.loading, expenses: true }, error: null }))
     try {
       const { data, error } = await supabase
         .from('expenses')
@@ -481,7 +535,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         loading: { ...get().loading, expenses: false },
       })
     } catch (err: any) {
-      set(s => ({ error: err.message, loading: { ...s.loading, expenses: false } }))
+      set((s) => ({ error: err.message, loading: { ...s.loading, expenses: false } }))
     }
   },
 
@@ -494,7 +548,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       id: tempId,
       created_at: nowIso,
     }
-    set(s => ({ expenses: [optimistic, ...s.expenses] }))
+    set((s) => ({ expenses: [optimistic, ...s.expenses] }))
 
     try {
       const { data: inserted, error } = await supabase
@@ -509,23 +563,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .single()
       if (error) throw error
 
-      set(s => ({
-        expenses: s.expenses.map(e => (e.id === tempId ? inserted : e)),
+      set((s) => ({
+        expenses: s.expenses.map((e) => (e.id === tempId ? inserted : e)),
       }))
     } catch (err: any) {
-      set(s => ({
-        expenses: s.expenses.filter(e => e.id !== tempId),
+      set((s) => ({
+        expenses: s.expenses.filter((e) => e.id !== tempId),
         error: err.message,
       }))
       throw err
     }
   },
 
-  // ── UPDATE EXPENSE ────────────────────────────────────────────────────── ⬅️ TAMBAH
+  // ── UPDATE EXPENSE ──────────────────────────────────────────────────────
   updateExpense: async (id, data) => {
     const prev = get().expenses
-    set(s => ({
-      expenses: s.expenses.map(e => (e.id === id ? { ...e, ...data } : e)),
+    set((s) => ({
+      expenses: s.expenses.map((e) => (e.id === id ? { ...e, ...data } : e)),
     }))
     try {
       const { error } = await supabase
@@ -547,7 +601,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // ── Delete Expense ──────────────────────────────────────────────────────
   deleteExpense: async (id) => {
     const prev = get().expenses
-    set(s => ({ expenses: s.expenses.filter(e => e.id !== id) }))
+    set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) }))
     try {
       const { error } = await supabase
         .from('expenses')
@@ -596,8 +650,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         { event: 'INSERT', schema: 'public', table: 'transactions' },
         (payload) => {
           const newTx = toAppTransaction(payload.new as DBTransaction)
-          set(s => {
-            const exists = s.transactions.some(t => t.id === newTx.id)
+          set((s) => {
+            const exists = s.transactions.some((t) => t.id === newTx.id)
             if (exists) return s
             return { transactions: [newTx, ...s.transactions] }
           })
@@ -608,8 +662,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         { event: 'UPDATE', schema: 'public', table: 'transactions' },
         (payload) => {
           const updated = toAppTransaction(payload.new as DBTransaction)
-          set(s => ({
-            transactions: s.transactions.map(t => (t.id === updated.id ? updated : t)),
+          set((s) => ({
+            transactions: s.transactions.map((t) => (t.id === updated.id ? updated : t)),
           }))
         }
       )
@@ -617,8 +671,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'transactions' },
         (payload) => {
-          set(s => ({
-            transactions: s.transactions.filter(t => t.id !== payload.old.id),
+          set((s) => ({
+            transactions: s.transactions.filter((t) => t.id !== payload.old.id),
           }))
         }
       )
@@ -628,8 +682,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         { event: 'INSERT', schema: 'public', table: 'expenses' },
         (payload) => {
           const newExp = payload.new as Expense
-          set(s => {
-            const exists = s.expenses.some(e => e.id === newExp.id)
+          set((s) => {
+            const exists = s.expenses.some((e) => e.id === newExp.id)
             if (exists) return s
             return { expenses: [newExp, ...s.expenses] }
           })
@@ -640,8 +694,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         { event: 'UPDATE', schema: 'public', table: 'expenses' },
         (payload) => {
           const updated = payload.new as Expense
-          set(s => ({
-            expenses: s.expenses.map(e => (e.id === updated.id ? updated : e)),
+          set((s) => ({
+            expenses: s.expenses.map((e) => (e.id === updated.id ? updated : e)),
           }))
         }
       )
@@ -649,8 +703,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'expenses' },
         (payload) => {
-          set(s => ({
-            expenses: s.expenses.filter(e => e.id !== payload.old.id),
+          set((s) => ({
+            expenses: s.expenses.filter((e) => e.id !== payload.old.id),
           }))
         }
       )
@@ -664,34 +718,34 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
 // ─── Selector Hooks ──────────────────────────────────────────────────────────
 
-export const useTransactions = () => useAppStore(s => s.transactions)
-export const useStaff = () => useAppStore(s => s.staff)
-export const useVehicles = () => useAppStore(s => s.vehicles)
-export const useVehiclesDB = () => useAppStore(s => s.vehiclesDB)
-export const useExpenses = () => useAppStore(s => s.expenses)
-export const useLoading = () => useAppStore(s => s.loading)
-export const useError = () => useAppStore(s => s.error)
-export const useUser = () => useAppStore(s => s.user)
+export const useTransactions = () => useAppStore((s) => s.transactions)
+export const useStaff = () => useAppStore((s) => s.staff)
+export const useVehicles = () => useAppStore((s) => s.vehicles)
+export const useVehiclesDB = () => useAppStore((s) => s.vehiclesDB)
+export const useExpenses = () => useAppStore((s) => s.expenses)
+export const useLoading = () => useAppStore((s) => s.loading)
+export const useError = () => useAppStore((s) => s.error)
+export const useUser = () => useAppStore((s) => s.user)
 
 export const useIsAdmin = () => {
-  const user = useAppStore(s => s.user)
+  const user = useAppStore((s) => s.user)
   return user?.role === 'admin'
 }
 
 export const useIsGuest = () => {
-  const user = useAppStore(s => s.user)
+  const user = useAppStore((s) => s.user)
   return user?.role === 'guest'
 }
 
 export const useStaffOptions = (): string[] => {
-  const staff = useAppStore(s => s.staff)
-  return useMemo(() => staff.map(st => st.nama), [staff])
+  const staff = useAppStore((s) => s.staff)
+  return useMemo(() => staff.map((st) => st.nama), [staff])
 }
 
 export const useModelOptions = (tipe: 'mobil' | 'motor'): string[] => {
-  const vehicles = useAppStore(s => s.vehiclesDB)
+  const vehicles = useAppStore((s) => s.vehiclesDB)
   return useMemo(
-    () => vehicles.filter(v => v.tipe === tipe).map(v => v.name),
+    () => vehicles.filter((v) => v.tipe === tipe).map((v) => v.name),
     [vehicles, tipe]
   )
 }
@@ -700,8 +754,8 @@ export const useVehiclePrice = (
   modelName: string,
   layanan: 'expres' | 'hidrolik'
 ): number => {
-  return useAppStore(s => {
-    const v = s.vehiclesDB.find(v => v.name === modelName)
+  return useAppStore((s) => {
+    const v = s.vehiclesDB.find((v) => v.name === modelName)
     if (!v) return 0
     return layanan === 'expres' ? v.price_expres : v.price_hidrolik
   })
