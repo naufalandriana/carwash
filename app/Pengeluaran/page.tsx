@@ -423,7 +423,7 @@ export default function PengeluaranPage() {
   const [filterKat, setFilterKat] = useState('all')
 
   // ── Period filter ──
-  const [preset, setPreset] = useState<PresetKey>('all')
+  const [preset, setPreset] = useState<PresetKey>('today')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
