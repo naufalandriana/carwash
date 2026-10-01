@@ -180,37 +180,230 @@ function MonthPresetChip({
 // ─── Blank form ───────────────────────────────────────────────────────────────
 const blankForm = { nama: '', kategori: '', nominal: '', keterangan: '' }
 
-// ─── Kategori tetap (fixed list) ──────────────────────────────────────────────
-const KATEGORI_OPTIONS = [
-  { value: 'Operasional', icon: 'bolt', desc: 'Listrik, air, makan, bensin, dll' },
-  { value: 'Obat', icon: 'medication', desc: 'Obat & kebutuhan medis' },
-  { value: 'Sabun', icon: 'soap', desc: 'Sabun & bahan cuci' },
-  { value: 'Perlengkapan', icon: 'build', desc: 'Alat & perlengkapan kerja' },
-  { value: 'Gaji', icon: 'payments', desc: 'Gaji & bonus karyawan' },
-]
-const KATEGORI_VALUES = KATEGORI_OPTIONS.map((k) => k.value)
+// ─── Kategori ─────────────────────────────────────────────────────────────────
+const FALLBACK_KATEGORI = 'Lainnya'
+const MAX_KATEGORI_LENGTH = 30
+
+// Kategori bawaan: selalu ada, tidak bisa diedit / dihapus
+const DEFAULT_KATEGORI = ['Operasional', 'Obat', 'Sabun', 'Perlengkapan', 'Gaji']
+const PERMANENT_KATEGORI = [...DEFAULT_KATEGORI, FALLBACK_KATEGORI]
+
+const KATEGORI_ICONS: Record<string, string> = {
+  Operasional: 'bolt',
+  Obat: 'medication',
+  Sabun: 'soap',
+  Perlengkapan: 'build',
+  Gaji: 'payments',
+  Lainnya: 'category',
+}
+const DEFAULT_KATEGORI_ICON = 'receipt_long'
+
+function katIcon(kat: string) {
+  return KATEGORI_ICONS[kat] ?? DEFAULT_KATEGORI_ICON
+}
+
+// ─── Dropdown Kategori (custom, sesuai tema) ─────────────────────────────────
+function CategoryDropdown({
+  value,
+  categories,
+  error,
+  onChange,
+  onAddCategory,
+  onRequestDelete,
+  onRequestEdit,
+}: {
+  value: string
+  categories: string[]
+  error?: boolean
+  onChange: (v: string) => void
+  onAddCategory: (name: string) => string | null // return nama final (atau null kalau gagal)
+  onRequestDelete: (name: string) => void
+  onRequestEdit: (name: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [addError, setAddError] = useState('')
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleAdd = () => {
+    const name = newName.trim()
+    if (!name) { setAddError('Nama kategori tidak boleh kosong'); return }
+    const finalName = onAddCategory(name)
+    if (!finalName) { setAddError('Gagal menambah kategori'); return }
+    onChange(finalName)
+    setNewName('')
+    setAddError('')
+    setOpen(false)
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className={`w-full h-11 px-4 flex items-center justify-between gap-2 bg-surface-container border rounded-xl text-sm transition-colors ${
+          open ? 'border-primary' : error ? 'border-error' : 'border-outline-variant'
+        }`}
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          {value ? (
+            <>
+              <span className="material-symbols-outlined text-[18px] text-primary">{katIcon(value)}</span>
+              <span className="font-semibold text-on-surface truncate">{value}</span>
+            </>
+          ) : (
+            <span className="text-on-surface-variant">Pilih kategori</span>
+          )}
+        </span>
+        <span className="material-symbols-outlined text-[20px] text-on-surface-variant flex-shrink-0">
+          {open ? 'expand_less' : 'expand_more'}
+        </span>
+      </button>
+
+      {/* Panel */}
+      {open && (
+        <div className="absolute z-30 left-0 right-0 mt-1.5 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl overflow-hidden">
+          {/* List */}
+          <div className="max-h-52 overflow-y-auto py-1">
+            {categories.map((k) => {
+              const active = k === value
+              const canModify = !PERMANENT_KATEGORI.includes(k)
+              return (
+                <div
+                  key={k}
+                  className={`flex items-center gap-1 pr-2 transition-colors ${
+                    active ? 'bg-primary-container' : 'hover:bg-surface-container-highest'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => { onChange(k); setOpen(false) }}
+                    className="flex-1 min-w-0 flex items-center gap-2.5 px-4 py-2.5 text-left"
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${active ? 'text-primary icon-fill' : 'text-on-surface-variant'}`}>
+                      {katIcon(k)}
+                    </span>
+                    <span className={`text-sm truncate ${active ? 'text-primary font-semibold' : 'text-on-surface'}`}>
+                      {k}
+                    </span>
+                  </button>
+                  {active && <span className="material-symbols-outlined text-[18px] text-primary">check</span>}
+                  {canModify && (
+                    <div className="flex items-center flex-shrink-0">
+                      <button
+                        type="button"
+                        aria-label={`Edit kategori ${k}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpen(false)
+                          onRequestEdit(k)
+                        }}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-primary transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Hapus kategori ${k}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpen(false)
+                          onRequestDelete(k)
+                        }}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error-container hover:text-error transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Tambah kategori baru */}
+          <div className="border-t border-outline-variant p-2.5 bg-surface-container-low">
+            <p className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide mb-1.5">
+              Tambah Kategori Baru
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newName}
+                maxLength={MAX_KATEGORI_LENGTH}
+                onChange={(e) => { setNewName(e.target.value); setAddError('') }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); handleAdd() }
+                }}
+                placeholder="Nama kategori..."
+                className={`flex-1 min-w-0 h-10 px-3 bg-surface-container border rounded-lg text-sm focus:border-primary outline-none transition-colors ${
+                  addError ? 'border-error' : 'border-outline-variant'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={handleAdd}
+                className="h-10 px-3 bg-primary text-white rounded-lg text-sm font-semibold flex items-center gap-1 active:scale-95 transition flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                <span className="hidden min-[360px]:inline">Tambah</span>
+              </button>
+            </div>
+            {addError && <p className="text-[11px] text-error mt-1">{addError}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Expense Form ─────────────────────────────────────────────────────────────
 function ExpenseForm({
   initial,
+  categories,
+  onAddCategory,
+  onRequestDeleteCategory,
+  onRequestEditCategory,
+  lastRename,
   onSubmit,
   onCancel,
   submitting,
 }: {
   initial?: typeof blankForm
+  categories: string[]
+  onAddCategory: (name: string) => string | null
+  onRequestDeleteCategory: (name: string) => void
+  onRequestEditCategory: (name: string) => void
+  lastRename?: { from: string; to: string } | null
   onSubmit: (data: typeof blankForm) => void
   onCancel?: () => void
   submitting: boolean
 }) {
   const [form, setForm] = useState(initial ?? blankForm)
-
-  const initialIsCustom = !!initial?.kategori && !KATEGORI_VALUES.includes(initial.kategori)
-  const [kategoriMode, setKategoriMode] = useState<'preset' | 'custom'>(
-    initialIsCustom ? 'custom' : 'preset'
-  )
   const [errors, setErrors] = useState<{ nama?: boolean; kategori?: boolean; nominal?: boolean }>({})
 
   const set = (key: keyof typeof blankForm, val: string) => setForm((f) => ({ ...f, [key]: val }))
+
+  // Kalau kategori yang lagi dipilih hilang:
+  // - habis di-rename → ikut ke nama baru
+  // - dihapus / kosong → pindah ke "Lainnya"
+  useEffect(() => {
+    if (!form.kategori || categories.includes(form.kategori)) return
+    setForm((f) => ({
+      ...f,
+      kategori: lastRename && lastRename.from === f.kategori ? lastRename.to : FALLBACK_KATEGORI,
+    }))
+  }, [categories, form.kategori, lastRename])
 
   const validate = () => {
     const nextErrors = {
@@ -251,73 +444,16 @@ function ExpenseForm({
         <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">
           Kategori <span className="text-error">*</span>
         </label>
-
-        {kategoriMode === 'preset' ? (
-          <div className="grid grid-cols-2 gap-2">
-            {KATEGORI_OPTIONS.map((k) => {
-              const active = form.kategori === k.value
-              return (
-                <button
-                  key={k.value}
-                  type="button"
-                  onClick={() => set('kategori', k.value)}
-                  className={`flex items-center gap-2 h-11 px-3 rounded-xl border text-left transition-colors ${
-                    active
-                      ? 'bg-primary-container border-primary text-primary'
-                      : 'bg-surface-container border-outline-variant text-on-surface-variant'
-                  }`}
-                >
-                  <span className={`material-symbols-outlined text-[18px] ${active ? 'icon-fill' : ''}`}>
-                    {k.icon}
-                  </span>
-                  <span className="text-sm font-semibold truncate">{k.value}</span>
-                </button>
-              )
-            })}
-            <button
-              type="button"
-              onClick={() => {
-                setKategoriMode('custom')
-                set('kategori', '')
-              }}
-              className="flex items-center justify-center gap-1.5 h-11 px-3 rounded-xl border border-dashed border-outline-variant text-on-surface-variant"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              <span className="text-sm font-semibold">Kategori Baru</span>
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <input
-              type="text"
-              autoFocus
-              value={form.kategori}
-              onChange={(e) => set('kategori', e.target.value)}
-              placeholder="Ketik nama kategori baru"
-              className={`w-full h-11 px-4 bg-surface-container border rounded-xl text-sm focus:border-primary outline-none transition-colors ${
-                errors.kategori ? 'border-error' : 'border-outline-variant'
-              }`}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setKategoriMode('preset')
-                set('kategori', '')
-              }}
-              className="text-xs font-semibold text-primary flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-              Pilih dari kategori tetap
-            </button>
-          </div>
-        )}
-
+        <CategoryDropdown
+          value={form.kategori}
+          categories={categories}
+          error={errors.kategori}
+          onChange={(v) => set('kategori', v)}
+          onAddCategory={onAddCategory}
+          onRequestDelete={onRequestDeleteCategory}
+          onRequestEdit={onRequestEditCategory}
+        />
         {errors.kategori && <p className="text-[11px] text-error mt-1">Kategori wajib dipilih</p>}
-        {kategoriMode === 'preset' && form.kategori && (
-          <p className="text-[11px] text-on-surface-variant mt-1">
-            {KATEGORI_OPTIONS.find((k) => k.value === form.kategori)?.desc}
-          </p>
-        )}
       </div>
 
       {/* Nominal */}
@@ -391,9 +527,23 @@ const KAT_COLORS: Record<string, string> = {
   Listrik: 'bg-yellow-100 text-yellow-700',
   Lainnya: 'bg-surface-container text-on-surface-variant',
 }
+// Warna untuk kategori custom (dipilih konsisten berdasarkan nama)
+const CUSTOM_KAT_PALETTE = [
+  'bg-teal-100 text-teal-700',
+  'bg-pink-100 text-pink-700',
+  'bg-indigo-100 text-indigo-700',
+  'bg-amber-100 text-amber-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-sky-100 text-sky-700',
+  'bg-rose-100 text-rose-700',
+  'bg-violet-100 text-violet-700',
+]
 function katColor(kat?: string | null) {
   if (!kat) return 'bg-surface-container text-on-surface-variant'
-  return KAT_COLORS[kat] ?? 'bg-surface-container text-on-surface-variant'
+  if (KAT_COLORS[kat]) return KAT_COLORS[kat]
+  let hash = 0
+  for (let i = 0; i < kat.length; i++) hash = (hash * 31 + kat.charCodeAt(i)) >>> 0
+  return CUSTOM_KAT_PALETTE[hash % CUSTOM_KAT_PALETTE.length]
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -414,13 +564,149 @@ export default function PengeluaranPage() {
   const [editingExp, setEditingExp] = useState<Expense | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
 
-  // Delete modal
+  // Delete modal (pengeluaran)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // Filter/search
   const [search, setSearch] = useState('')
   const [filterKat, setFilterKat] = useState('all')
+
+  // ── Kategori ──
+  // Kategori baru yang baru ditambah di dropdown tapi belum dipakai di pengeluaran manapun.
+  // Hilang otomatis kalau form ditutup / dibatalkan tanpa disimpan.
+  const [pendingCategories, setPendingCategories] = useState<string[]>([])
+
+  // Delete kategori modal
+  const [deleteKategori, setDeleteKategori] = useState<string | null>(null)
+  const [deleteKategoriSubmitting, setDeleteKategoriSubmitting] = useState(false)
+
+  // Edit (rename) kategori modal
+  const [editKategori, setEditKategori] = useState<string | null>(null)
+  const [editKategoriName, setEditKategoriName] = useState('')
+  const [editKategoriError, setEditKategoriError] = useState('')
+  const [editKategoriSubmitting, setEditKategoriSubmitting] = useState(false)
+  const [lastRename, setLastRename] = useState<{ from: string; to: string } | null>(null)
+
+  // Daftar kategori = bawaan + kategori custom yang MASIH dipakai + pending, "Lainnya" selalu paling bawah.
+  // Kategori custom yang sudah kosong (tidak ada pengeluarannya) otomatis tidak muncul.
+  const categories = useMemo(() => {
+    const custom = new Set<string>()
+    expenses.forEach((e) => {
+      const k = (e.kategori || '').trim()
+      if (k && !PERMANENT_KATEGORI.includes(k)) custom.add(k)
+    })
+    pendingCategories.forEach((k) => {
+      if (!PERMANENT_KATEGORI.includes(k)) custom.add(k)
+    })
+    const sortedCustom = Array.from(custom).sort((a, b) => a.localeCompare(b, 'id'))
+    return [...DEFAULT_KATEGORI, ...sortedCustom, FALLBACK_KATEGORI]
+  }, [expenses, pendingCategories])
+
+  // Tambah kategori → return nama final (kalau sudah ada, pakai yang existing)
+  const handleAddCategory = (rawName: string): string | null => {
+    const name = rawName.trim().slice(0, MAX_KATEGORI_LENGTH)
+    if (!name) return null
+    const existing = categories.find((c) => c.toLowerCase() === name.toLowerCase())
+    if (existing) return existing
+    setPendingCategories((prev) => [...prev, name])
+    showToast(`Kategori "${name}" ditambahkan`)
+    return name
+  }
+
+  // ── Hapus kategori ──
+  const kategoriDeleteCount = useMemo(
+    () => (deleteKategori ? expenses.filter((e) => e.kategori === deleteKategori).length : 0),
+    [deleteKategori, expenses]
+  )
+
+  const handleDeleteKategori = async () => {
+    if (!deleteKategori) return
+    setDeleteKategoriSubmitting(true)
+    try {
+      const affected = expenses.filter((e) => e.kategori === deleteKategori)
+      await Promise.all(
+        affected.map((e) =>
+          updateExpense(e.id, {
+            nama_pengeluaran: e.nama_pengeluaran,
+            kategori: FALLBACK_KATEGORI,
+            nominal: e.nominal,
+            keterangan: e.keterangan ?? null,
+          })
+        )
+      )
+      setPendingCategories((prev) => prev.filter((c) => c !== deleteKategori))
+      if (filterKat === deleteKategori) setFilterKat('all')
+      showToast(`Kategori "${deleteKategori}" dihapus`)
+      setDeleteKategori(null)
+    } catch (err: any) {
+      showToast(err.message || 'Gagal menghapus kategori', false)
+    } finally {
+      setDeleteKategoriSubmitting(false)
+    }
+  }
+
+  // ── Edit (rename) kategori ──
+  const openEditKategori = (name: string) => {
+    setEditKategori(name)
+    setEditKategoriName(name)
+    setEditKategoriError('')
+  }
+
+  const editKategoriCount = useMemo(
+    () => (editKategori ? expenses.filter((e) => e.kategori === editKategori).length : 0),
+    [editKategori, expenses]
+  )
+
+  const handleRenameKategori = async () => {
+    if (!editKategori) return
+    const newName = editKategoriName.trim().slice(0, MAX_KATEGORI_LENGTH)
+
+    if (!newName) { setEditKategoriError('Nama kategori tidak boleh kosong'); return }
+    if (newName === editKategori) { setEditKategori(null); return }
+
+    const clash = categories.find(
+      (c) => c.toLowerCase() === newName.toLowerCase() && c !== editKategori
+    )
+    if (clash) { setEditKategoriError(`Kategori "${clash}" sudah ada`); return }
+
+    setEditKategoriSubmitting(true)
+    setLastRename({ from: editKategori, to: newName })
+    try {
+      const affected = expenses.filter((e) => e.kategori === editKategori)
+      await Promise.all(
+        affected.map((e) =>
+          updateExpense(e.id, {
+            nama_pengeluaran: e.nama_pengeluaran,
+            kategori: newName,
+            nominal: e.nominal,
+            keterangan: e.keterangan ?? null,
+          })
+        )
+      )
+      setPendingCategories((prev) => prev.map((c) => (c === editKategori ? newName : c)))
+      if (filterKat === editKategori) setFilterKat(newName)
+      showToast(`Kategori diubah menjadi "${newName}"`)
+      setEditKategori(null)
+    } catch (err: any) {
+      setLastRename(null)
+      showToast(err.message || 'Gagal mengubah kategori', false)
+    } finally {
+      setEditKategoriSubmitting(false)
+    }
+  }
+
+  // Tutup form tambah / edit → buang kategori pending yang belum kepakai
+  const closeAddForm = () => {
+    setShowForm(false)
+    setPendingCategories([])
+    setLastRename(null)
+  }
+  const closeEditModal = () => {
+    setEditingExp(null)
+    setPendingCategories([])
+    setLastRename(null)
+  }
 
   // ── Period filter ──
   const [preset, setPreset] = useState<PresetKey>('today')
@@ -516,7 +802,7 @@ export default function PengeluaranPage() {
         nominal,
         keterangan: form.keterangan.trim() || null,
       })
-      setShowForm(false)
+      closeAddForm()
       showToast('Pengeluaran berhasil ditambahkan!')
     } catch (err: any) {
       showToast(err.message || 'Gagal menambahkan', false)
@@ -539,7 +825,7 @@ export default function PengeluaranPage() {
         nominal,
         keterangan: form.keterangan.trim() || null,
       })
-      setEditingExp(null)
+      closeEditModal()
       showToast('Pengeluaran berhasil diperbarui!')
     } catch (err: any) {
       showToast(err.message || 'Gagal memperbarui', false)
@@ -579,7 +865,7 @@ export default function PengeluaranPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-surface">
-      <main className="flex-1 p-4 pb-28 space-y-4">
+      <main className="flex-1 p-4 pb-28 space-y-4 w-full max-w-3xl mx-auto">
         <Toast
           visible={toast.visible}
           message={toast.message}
@@ -588,22 +874,22 @@ export default function PengeluaranPage() {
         />
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <h1 className="text-[22px] font-extrabold text-on-surface">Pengeluaran</h1>
             <p className="text-sm text-on-surface-variant mt-0.5">Catat semua pengeluaran toko</p>
           </div>
           {isAdmin && !showForm && (
             <button
               onClick={() => setShowForm(true)}
-              className="h-10 px-4 bg-primary text-white rounded-2xl text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-primary/20 active:scale-95 transition"
+              className="h-10 px-4 flex-shrink-0 bg-primary text-white rounded-2xl text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-primary/20 active:scale-95 transition"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
               Tambah
             </button>
           )}
           {!isAdmin && (
-            <span className="bg-amber-50 text-amber-700 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1">
+            <span className="bg-amber-50 text-amber-700 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1 flex-shrink-0">
               <span className="material-symbols-outlined text-[16px]">visibility</span>Guest
             </span>
           )}
@@ -646,7 +932,7 @@ export default function PengeluaranPage() {
 
           {/* Custom range */}
           {preset === 'custom' && (
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 pt-1">
               <div>
                 <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Dari</label>
                 <input
@@ -671,14 +957,14 @@ export default function PengeluaranPage() {
 
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-error-container flex items-center justify-center mb-2">
               <span className="material-symbols-outlined text-error text-[16px] icon-fill">money_off</span>
             </div>
             <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Total Pengeluaran</p>
-            <p className="text-base font-extrabold text-error mt-0.5">{fmtRupiah(summary.total)}</p>
+            <p className="text-base font-extrabold text-error mt-0.5 break-words">{fmtRupiah(summary.total)}</p>
           </div>
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-primary-container flex items-center justify-center mb-2">
               <span className="material-symbols-outlined text-primary text-[16px] icon-fill">category</span>
             </div>
@@ -697,11 +983,20 @@ export default function PengeluaranPage() {
           <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-on-surface">Tambah Pengeluaran</h2>
-              <button onClick={() => setShowForm(false)} className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center">
+              <button onClick={closeAddForm} className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center">
                 <span className="material-symbols-outlined text-[18px] text-on-surface-variant">close</span>
               </button>
             </div>
-            <ExpenseForm onSubmit={handleAdd} onCancel={() => setShowForm(false)} submitting={addSubmitting} />
+            <ExpenseForm
+              categories={categories}
+              onAddCategory={handleAddCategory}
+              onRequestDeleteCategory={setDeleteKategori}
+              onRequestEditCategory={openEditKategori}
+              lastRename={lastRename}
+              onSubmit={handleAdd}
+              onCancel={closeAddForm}
+              submitting={addSubmitting}
+            />
           </div>
         )}
 
@@ -731,7 +1026,7 @@ export default function PengeluaranPage() {
                 <button
                   key={k}
                   onClick={() => setFilterKat(filterKat === k ? 'all' : k)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                     filterKat === k ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant'
                   }`}
                 >
@@ -767,7 +1062,7 @@ export default function PengeluaranPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-on-surface">{exp.nama_pengeluaran}</p>
+                        <p className="text-sm font-semibold text-on-surface break-words">{exp.nama_pengeluaran}</p>
                         {exp.kategori && (
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${katColor(exp.kategori)}`}>
                             {exp.kategori}
@@ -779,7 +1074,7 @@ export default function PengeluaranPage() {
                       )}
                       <p className="text-[11px] text-outline mt-1">{fmtDate(exp.created_at)}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col items-end gap-2 shrink-0 min-[400px]:flex-row min-[400px]:items-center">
                       <span className="text-sm font-extrabold text-error">{fmtRupiah(exp.nominal)}</span>
                       {isAdmin && (
                         <div className="flex gap-1">
@@ -806,16 +1101,16 @@ export default function PengeluaranPage() {
         </div>
       </main>
 
-      {/* ─── MODAL EDIT ────────────────────────────────────────────────────── */}
+      {/* ─── MODAL EDIT PENGELUARAN ────────────────────────────────────────── */}
       {editingExp && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={(e) => e.target === e.currentTarget && setEditingExp(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && closeEditModal()}
         >
-          <div className="w-full sm:max-w-md bg-surface-container-lowest rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant sticky top-0 bg-surface-container-lowest rounded-t-3xl">
+          <div className="w-full max-w-md bg-surface-container-lowest rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant sticky top-0 z-10 bg-surface-container-lowest rounded-t-3xl">
               <h3 className="text-base font-bold text-on-surface">Edit Pengeluaran</h3>
-              <button onClick={() => setEditingExp(null)} className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
+              <button onClick={closeEditModal} className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
                 <span className="material-symbols-outlined text-[20px] text-on-surface-variant">close</span>
               </button>
             </div>
@@ -827,8 +1122,13 @@ export default function PengeluaranPage() {
                   nominal: formatRupiah(editingExp.nominal.toString()),
                   keterangan: editingExp.keterangan || '',
                 }}
+                categories={categories}
+                onAddCategory={handleAddCategory}
+                onRequestDeleteCategory={setDeleteKategori}
+                onRequestEditCategory={openEditKategori}
+                lastRename={lastRename}
                 onSubmit={handleEdit}
-                onCancel={() => setEditingExp(null)}
+                onCancel={closeEditModal}
                 submitting={editSubmitting}
               />
             </div>
@@ -836,7 +1136,7 @@ export default function PengeluaranPage() {
         </div>
       )}
 
-      {/* ─── MODAL HAPUS ─────────────────────────────────────────────────────── */}
+      {/* ─── MODAL HAPUS PENGELUARAN ─────────────────────────────────────────── */}
       {deleteId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
@@ -863,6 +1163,95 @@ export default function PengeluaranPage() {
                 className="flex-1 h-11 bg-error text-white rounded-xl font-bold text-sm active:scale-95 transition disabled:opacity-50"
               >
                 {deleteSubmitting ? 'Menghapus...' : 'Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL EDIT KATEGORI ─────────────────────────────────────────────── */}
+      {editKategori && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && !editKategoriSubmitting && setEditKategori(null)}
+        >
+          <div className="w-full max-w-sm bg-surface-container-lowest rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-6">
+              <div className="w-14 h-14 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-primary text-[28px]">edit</span>
+              </div>
+              <h3 className="text-base font-bold text-on-surface mb-1 text-center">Ubah Nama Kategori</h3>
+              <p className="text-sm text-on-surface-variant text-center mb-4">
+                {editKategoriCount > 0
+                  ? `${editKategoriCount} pengeluaran di kategori ini ikut berubah.`
+                  : 'Belum ada pengeluaran di kategori ini.'}
+              </p>
+              <input
+                type="text"
+                autoFocus
+                value={editKategoriName}
+                maxLength={MAX_KATEGORI_LENGTH}
+                onChange={(e) => { setEditKategoriName(e.target.value); setEditKategoriError('') }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleRenameKategori() }}
+                placeholder="Nama kategori baru"
+                className={`w-full h-11 px-4 bg-surface-container border rounded-xl text-sm focus:border-primary outline-none transition-colors ${
+                  editKategoriError ? 'border-error' : 'border-outline-variant'
+                }`}
+              />
+              {editKategoriError && <p className="text-[11px] text-error mt-1">{editKategoriError}</p>}
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => !editKategoriSubmitting && setEditKategori(null)}
+                className="flex-1 h-11 bg-surface-container border border-outline-variant rounded-xl text-sm font-semibold text-on-surface-variant"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleRenameKategori}
+                disabled={editKategoriSubmitting}
+                className="flex-1 h-11 bg-primary text-white rounded-xl font-bold text-sm active:scale-95 transition disabled:opacity-50"
+              >
+                {editKategoriSubmitting ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL HAPUS KATEGORI ────────────────────────────────────────────── */}
+      {deleteKategori && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && !deleteKategoriSubmitting && setDeleteKategori(null)}
+        >
+          <div className="w-full max-w-sm bg-surface-container-lowest rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-error-container flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-error text-[28px]">label_off</span>
+              </div>
+              <h3 className="text-base font-bold text-on-surface mb-1">
+                Hapus kategori &quot;{deleteKategori}&quot;?
+              </h3>
+              <p className="text-sm text-on-surface-variant">
+                {kategoriDeleteCount > 0
+                  ? `${kategoriDeleteCount} pengeluaran di kategori ini akan dipindahkan ke "${FALLBACK_KATEGORI}".`
+                  : 'Belum ada pengeluaran di kategori ini.'}
+              </p>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => !deleteKategoriSubmitting && setDeleteKategori(null)}
+                className="flex-1 h-11 bg-surface-container border border-outline-variant rounded-xl text-sm font-semibold text-on-surface-variant"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteKategori}
+                disabled={deleteKategoriSubmitting}
+                className="flex-1 h-11 bg-error text-white rounded-xl font-bold text-sm active:scale-95 transition disabled:opacity-50"
+              >
+                {deleteKategoriSubmitting ? 'Menghapus...' : 'Ya, Hapus'}
               </button>
             </div>
           </div>

@@ -1,49 +1,60 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { useAppStore } from '@/lib/Store'
 
 export default function LoginPage() {
-  const router = useRouter()
-  const { user, authenticateAdmin, error, clearError } = useAppStore()
+  const { authenticateAdmin, error, clearError } = useAppStore()
 
   const [showAdminForm, setShowAdminForm] = useState(false)
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Kalau udah login, langsung ke halaman utama
-  useEffect(() => {
-    if (user) {
-      router.push('/')
-    }
-  }, [user, router])
+  // Catatan: useEffect yang redirect berdasarkan `user` sengaja dihapus.
+  // Kalau mau auto-redirect user yang sudah login dari /login ke /,
+  // lakukan di middleware.ts (cek cookie session), bukan di komponen.
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
 
     try {
       await authenticateAdmin(password)
-      router.push('/')
+
+      // Kalau authenticateAdmin nggak throw saat password salah,
+      // cek manual supaya nggak ikut ter-redirect
+      if (!useAppStore.getState().user) {
+        setLoading(false)
+        return
+      }
+
+      // Hard navigation: bypass router cache Next.js,
+      // cookie pasti terbaca oleh middleware
+      window.location.assign('/')
     } catch (err) {
       console.error('Login error:', err)
-    } finally {
       setLoading(false)
     }
+    // Sengaja tanpa finally: kalau sukses, loading dibiarkan true
+    // sampai halaman pindah (biar nggak ada flicker / klik dobel)
   }
 
   const handleGuestLogin = async () => {
+    if (loading) return
     setLoading(true)
+
     try {
       // Set cookie session dulu lewat API (buat middleware)
-      await fetch('/api/auth/guest', { method: 'POST' })
+      const res = await fetch('/api/auth/guest', { method: 'POST' })
+      if (!res.ok) throw new Error('Guest login gagal')
+
       // Baru update Zustand store (buat UI)
       useAppStore.getState().login({ role: 'guest', name: 'Guest User' })
-      router.push('/')
+
+      window.location.assign('/')
     } catch (err) {
       console.error('Guest login error:', err)
-    } finally {
       setLoading(false)
     }
   }
@@ -74,7 +85,8 @@ export default function LoginPage() {
           <div className="space-y-3">
             <button
               onClick={() => setShowAdminForm(true)}
-              className="w-full h-14 bg-primary text-white rounded-xl font-semibold text-base shadow-md shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full h-14 bg-primary text-white rounded-xl font-semibold text-base shadow-md shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-[22px]">admin_panel_settings</span>
               Login sebagai Admin
