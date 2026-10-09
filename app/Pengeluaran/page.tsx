@@ -38,11 +38,11 @@ const MONTH_NAMES = [
 // ─── Period filter types ───────────────────────────────────────────────────
 type PresetKey = 'today' | 'month' | 'custom' | 'all'
 
-const presetOptions: { value: PresetKey; label: string; icon: string }[] = [
-  { value: 'today', label: 'Hari Ini', icon: 'today' },
-  { value: 'month', label: 'Bulan Ini', icon: 'calendar_month' },
-  { value: 'custom', label: 'Custom', icon: 'tune' },
-  { value: 'all', label: 'Semua', icon: 'all_inclusive' },
+const presetOptions: { value: PresetKey; label: string }[] = [
+  { value: 'today', label: 'Hari Ini' },
+  { value: 'month', label: 'Bulan Ini' },
+  { value: 'custom', label: 'Custom' },
+  { value: 'all', label: 'Semua' },
 ]
 
 function monthRangeFromValue(value: string): { from: string; to: string } {
@@ -52,6 +52,7 @@ function monthRangeFromValue(value: string): { from: string; to: string } {
   return { from: fmtDateInput(start), to: fmtDateInput(end) }
 }
 
+// Ambil daftar bulan yang benar-benar ada datanya dari list expenses (client-side)
 function getAvailableMonths(expenses: Expense[]): { value: string; label: string }[] {
   const set = new Set<string>()
   expenses.forEach((e) => {
@@ -59,7 +60,7 @@ function getAvailableMonths(expenses: Expense[]): { value: string; label: string
     set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   })
   return Array.from(set)
-    .sort((a, b) => (a < b ? 1 : -1))
+    .sort((a, b) => (a < b ? 1 : -1)) // terbaru dulu
     .map((v) => {
       const [y, m] = v.split('-').map(Number)
       return { value: v, label: `${MONTH_NAMES[m - 1]} ${y}` }
@@ -71,39 +72,23 @@ function getPeriodRange(
   selectedMonth: string,
   customFrom: string,
   customTo: string
-): { from?: string; to?: string; label: string } {
+): { from?: string; to?: string } {
   const now = new Date()
   switch (preset) {
     case 'today':
-      return { from: fmtDateInput(now), to: fmtDateInput(now), label: 'Hari Ini' }
-    case 'month': {
-      if (!selectedMonth) return { label: 'Bulan Ini' }
-      const r = monthRangeFromValue(selectedMonth)
-      const [y, m] = selectedMonth.split('-').map(Number)
-      return { ...r, label: `${MONTH_NAMES[m - 1]} ${y}` }
-    }
+      return { from: fmtDateInput(now), to: fmtDateInput(now) }
+    case 'month':
+      if (!selectedMonth) return {}
+      return monthRangeFromValue(selectedMonth)
     case 'custom':
-      return { from: customFrom || undefined, to: customTo || undefined, label: 'Custom' }
+      return { from: customFrom || undefined, to: customTo || undefined }
     case 'all':
     default:
-      return { label: 'Semua' }
+      return {}
   }
 }
 
-// ─── Section Title ───────────────────────────────────────────────────────────
-function SectionTitle({ icon, label, right }: { icon: string; label: string; right?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 mb-3">
-      <div className="flex items-center gap-2">
-        <span className="material-symbols-outlined text-[18px] text-primary">{icon}</span>
-        <h4 className="text-sm font-bold text-on-surface">{label}</h4>
-      </div>
-      {right}
-    </div>
-  )
-}
-
-// ─── Chip "Bulan Ini" dengan dropdown popover ──────────────────────────────
+// ─── Chip "Bulan Ini" dengan dropdown popover (sama seperti di Laporan) ──────
 function MonthPresetChip({
   active, months, value, onSelect, onActivate,
 }: {
@@ -156,15 +141,12 @@ function MonthPresetChip({
         ref={btnRef}
         type="button"
         onClick={toggleOpen}
-        className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-          active
-            ? 'bg-primary text-white shadow-sm shadow-primary/30'
-            : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+        className={`flex-shrink-0 flex items-center gap-1 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+          active ? 'bg-primary text-white shadow-md' : 'bg-surface-container text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'
         }`}
       >
-        <span className="material-symbols-outlined text-[15px]">calendar_month</span>
         {active && label ? label : 'Bulan Ini'}
-        <span className="material-symbols-outlined text-[15px]">{open ? 'expand_less' : 'expand_more'}</span>
+        <span className="material-symbols-outlined text-[16px]">{open ? 'expand_less' : 'expand_more'}</span>
       </button>
 
       {open && pos && (
@@ -202,6 +184,7 @@ const blankForm = { nama: '', kategori: '', nominal: '', keterangan: '' }
 const FALLBACK_KATEGORI = 'Lainnya'
 const MAX_KATEGORI_LENGTH = 30
 
+// Kategori bawaan: selalu ada, tidak bisa diedit / dihapus
 const DEFAULT_KATEGORI = ['Operasional', 'Obat', 'Sabun', 'Perlengkapan', 'Gaji']
 const PERMANENT_KATEGORI = [...DEFAULT_KATEGORI, FALLBACK_KATEGORI]
 
@@ -219,7 +202,7 @@ function katIcon(kat: string) {
   return KATEGORI_ICONS[kat] ?? DEFAULT_KATEGORI_ICON
 }
 
-// ─── Dropdown Kategori ───────────────────────────────────────────────────────
+// ─── Dropdown Kategori (custom, sesuai tema) ─────────────────────────────────
 function CategoryDropdown({
   value,
   categories,
@@ -233,7 +216,7 @@ function CategoryDropdown({
   categories: string[]
   error?: boolean
   onChange: (v: string) => void
-  onAddCategory: (name: string) => string | null
+  onAddCategory: (name: string) => string | null // return nama final (atau null kalau gagal)
   onRequestDelete: (name: string) => void
   onRequestEdit: (name: string) => void
 }) {
@@ -264,6 +247,7 @@ function CategoryDropdown({
 
   return (
     <div ref={wrapRef} className="relative">
+      {/* Trigger */}
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
@@ -286,8 +270,10 @@ function CategoryDropdown({
         </span>
       </button>
 
+      {/* Panel */}
       {open && (
         <div className="absolute z-30 left-0 right-0 mt-1.5 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl overflow-hidden">
+          {/* List */}
           <div className="max-h-52 overflow-y-auto py-1">
             {categories.map((k) => {
               const active = k === value
@@ -345,6 +331,7 @@ function CategoryDropdown({
             })}
           </div>
 
+          {/* Tambah kategori baru */}
           <div className="border-t border-outline-variant p-2.5 bg-surface-container-low">
             <p className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide mb-1.5">
               Tambah Kategori Baru
@@ -407,6 +394,9 @@ function ExpenseForm({
 
   const set = (key: keyof typeof blankForm, val: string) => setForm((f) => ({ ...f, [key]: val }))
 
+  // Kalau kategori yang lagi dipilih hilang:
+  // - habis di-rename → ikut ke nama baru
+  // - dihapus / kosong → pindah ke "Lainnya"
   useEffect(() => {
     if (!form.kategori || categories.includes(form.kategori)) return
     setForm((f) => ({
@@ -448,6 +438,7 @@ function ExpenseForm({
         {errors.nama && <p className="text-[11px] text-error mt-1">Nama pengeluaran wajib diisi</p>}
       </div>
 
+      {/* Kategori */}
       <div>
         <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">
           Kategori <span className="text-error">*</span>
@@ -532,6 +523,7 @@ const KAT_COLORS: Record<string, string> = {
   Listrik: 'bg-yellow-100 text-yellow-700',
   Lainnya: 'bg-surface-container text-on-surface-variant',
 }
+// Warna untuk kategori custom (dipilih konsisten berdasarkan nama)
 const CUSTOM_KAT_PALETTE = [
   'bg-teal-100 text-teal-700',
   'bg-pink-100 text-pink-700',
@@ -569,23 +561,31 @@ export default function PengeluaranPage() {
   const [editingExp, setEditingExp] = useState<Expense | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
 
+  // Delete modal (pengeluaran)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   const [search, setSearch] = useState('')
   const [filterKat, setFilterKat] = useState('all')
 
+  // ── Kategori ──
+  // Kategori baru yang baru ditambah di dropdown tapi belum dipakai di pengeluaran manapun.
+  // Hilang otomatis kalau form ditutup / dibatalkan tanpa disimpan.
   const [pendingCategories, setPendingCategories] = useState<string[]>([])
 
+  // Delete kategori modal
   const [deleteKategori, setDeleteKategori] = useState<string | null>(null)
   const [deleteKategoriSubmitting, setDeleteKategoriSubmitting] = useState(false)
 
+  // Edit (rename) kategori modal
   const [editKategori, setEditKategori] = useState<string | null>(null)
   const [editKategoriName, setEditKategoriName] = useState('')
   const [editKategoriError, setEditKategoriError] = useState('')
   const [editKategoriSubmitting, setEditKategoriSubmitting] = useState(false)
   const [lastRename, setLastRename] = useState<{ from: string; to: string } | null>(null)
 
+  // Daftar kategori = bawaan + kategori custom yang MASIH dipakai + pending, "Lainnya" selalu paling bawah.
+  // Kategori custom yang sudah kosong (tidak ada pengeluarannya) otomatis tidak muncul.
   const categories = useMemo(() => {
     const custom = new Set<string>()
     expenses.forEach((e) => {
@@ -599,6 +599,7 @@ export default function PengeluaranPage() {
     return [...DEFAULT_KATEGORI, ...sortedCustom, FALLBACK_KATEGORI]
   }, [expenses, pendingCategories])
 
+  // Tambah kategori → return nama final (kalau sudah ada, pakai yang existing)
   const handleAddCategory = (rawName: string): string | null => {
     const name = rawName.trim().slice(0, MAX_KATEGORI_LENGTH)
     if (!name) return null
@@ -609,6 +610,7 @@ export default function PengeluaranPage() {
     return name
   }
 
+  // ── Hapus kategori ──
   const kategoriDeleteCount = useMemo(
     () => (deleteKategori ? expenses.filter((e) => e.kategori === deleteKategori).length : 0),
     [deleteKategori, expenses]
@@ -640,6 +642,7 @@ export default function PengeluaranPage() {
     }
   }
 
+  // ── Edit (rename) kategori ──
   const openEditKategori = (name: string) => {
     setEditKategori(name)
     setEditKategoriName(name)
@@ -689,6 +692,7 @@ export default function PengeluaranPage() {
     }
   }
 
+  // Tutup form tambah / edit → buang kategori pending yang belum kepakai
   const closeAddForm = () => {
     setShowForm(false)
     setPendingCategories([])
@@ -700,14 +704,7 @@ export default function PengeluaranPage() {
     setLastRename(null)
   }
 
-  // Buka form tambah + auto-scroll ke form
-  const openAddForm = () => {
-    setShowForm(true)
-    setTimeout(() => {
-      addFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 80)
-  }
-
+  // ── Period filter ──
   const [preset, setPreset] = useState<PresetKey>('today')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [customFrom, setCustomFrom] = useState('')
@@ -719,12 +716,14 @@ export default function PengeluaranPage() {
     [availableMonths, selectedMonth]
   )
 
+  // Set default bulan (paling baru) begitu daftar bulan siap & belum ada yang dipilih
   useEffect(() => {
     if (preset === 'month' && !selectedMonth && availableMonths.length > 0) {
       setSelectedMonth(availableMonths[0].value)
     }
   }, [preset, selectedMonth, availableMonths])
 
+  // ── Init ──
   useEffect(() => {
     const init = async () => {
       if (!initialized) await initStore()
@@ -737,6 +736,7 @@ export default function PengeluaranPage() {
     if (storeReady) fetchExpenses()
   }, [storeReady, fetchExpenses])
 
+  // ── Period-filtered expenses (dasar untuk summary & list) ──
   const periodFiltered = useMemo(() => {
     const { from, to } = getPeriodRange(preset, selectedMonth, customFrom, customTo)
     if (!from && !to) return expenses
@@ -748,6 +748,7 @@ export default function PengeluaranPage() {
     })
   }, [expenses, preset, selectedMonth, customFrom, customTo])
 
+  // ── Summary ──
   const summary = useMemo(() => {
     const total = periodFiltered.reduce((s, e) => s + e.nominal, 0)
     const byKat: Record<string, number> = {}
@@ -756,10 +757,10 @@ export default function PengeluaranPage() {
       byKat[k] = (byKat[k] || 0) + e.nominal
     })
     const topKat = Object.entries(byKat).sort((a, b) => b[1] - a[1])[0]
-    const sorted = Object.entries(byKat).sort((a, b) => b[1] - a[1])
-    return { total, topKat, sorted, count: periodFiltered.length }
+    return { total, topKat }
   }, [periodFiltered])
 
+  // ── Filter kategori (dari data periode aktif) ──
   const allKategori = useMemo(() => {
     const s = new Set(periodFiltered.map((e) => e.kategori || 'Lainnya'))
     return Array.from(s).sort()
@@ -778,6 +779,7 @@ export default function PengeluaranPage() {
     })
   }, [periodFiltered, search, filterKat])
 
+  // Reset filter kategori kalau kategori yang lagi aktif gak ada lagi di periode baru
   useEffect(() => {
     if (filterKat !== 'all' && !allKategori.includes(filterKat)) setFilterKat('all')
   }, [allKategori, filterKat])
@@ -875,7 +877,7 @@ export default function PengeluaranPage() {
           </div>
           {isAdmin && !showForm && (
             <button
-              onClick={openAddForm}
+              onClick={() => setShowForm(true)}
               className="h-10 px-4 flex-shrink-0 bg-primary text-white rounded-2xl text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-primary/20 active:scale-95 transition"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
@@ -889,16 +891,78 @@ export default function PengeluaranPage() {
           )}
         </div>
 
-        {/* ── Hero Card (Card Pengeluaran) ── */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-error via-error to-error/80 rounded-2xl p-5 shadow-lg shadow-error/20 text-white">
-          <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
-          <div className="absolute -right-2 -bottom-8 w-24 h-24 rounded-full bg-white/5" />
-          <div className="relative">
-            <div className="flex items-center gap-2 opacity-90">
-              <span className="material-symbols-outlined text-[16px]">account_balance_wallet</span>
-              <p className="text-[11px] font-semibold uppercase tracking-wider">
-                Total Pengeluaran · {periodeText}
-              </p>
+        {/* ── Filter Periode ── */}
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
+            <p className="text-xs font-bold text-on-surface">
+              Periode {preset === 'month' && currentMonthLabel ? `· ${currentMonthLabel}` : ''}
+            </p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+            {presetOptions.map((opt) => (
+              opt.value === 'month' ? (
+                <MonthPresetChip
+                  key={opt.value}
+                  active={preset === 'month'}
+                  months={availableMonths}
+                  value={selectedMonth}
+                  onSelect={setSelectedMonth}
+                  onActivate={() => setPreset('month')}
+                />
+              ) : (
+                <button
+                  key={opt.value}
+                  onClick={() => setPreset(opt.value)}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+                    preset === opt.value
+                      ? 'bg-primary text-white shadow-md'
+                      : 'bg-surface-container text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            ))}
+          </div>
+
+          {/* Custom range */}
+          {preset === 'custom' && (
+            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 pt-1">
+              <div>
+                <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Dari</label>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Sampai</label>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Summary cards ── */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-error-container flex items-center justify-center mb-2">
+              <span className="material-symbols-outlined text-error text-[16px] icon-fill">money_off</span>
+            </div>
+            <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Total Pengeluaran</p>
+            <p className="text-base font-extrabold text-error mt-0.5 break-words">{fmtRupiah(summary.total)}</p>
+          </div>
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-primary-container flex items-center justify-center mb-2">
+              <span className="material-symbols-outlined text-primary text-[16px] icon-fill">category</span>
             </div>
             <p className="text-3xl font-extrabold mt-1.5 tracking-tight">
               {fmtRupiah(summary.total)}
@@ -933,10 +997,7 @@ export default function PengeluaranPage() {
             className="bg-surface-container-lowest border-2 border-primary/40 rounded-2xl p-4 shadow-lg shadow-primary/10 scroll-mt-4 animate-in fade-in slide-in-from-top-2 duration-300"
           >
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-primary">add_circle</span>
-                <h2 className="text-sm font-bold text-on-surface">Tambah Pengeluaran</h2>
-              </div>
+              <h2 className="text-sm font-bold text-on-surface">Tambah Pengeluaran</h2>
               <button onClick={closeAddForm} className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center">
                 <span className="material-symbols-outlined text-[18px] text-on-surface-variant">close</span>
               </button>
@@ -951,103 +1012,6 @@ export default function PengeluaranPage() {
               onCancel={closeAddForm}
               submitting={addSubmitting}
             />
-          </div>
-        )}
-
-        {/* ── Periode Card ── */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
-          <SectionTitle
-            icon="calendar_month"
-            label="Periode"
-            right={
-              <span className="text-[11px] text-primary font-semibold">{periodeText}</span>
-            }
-          />
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-            {presetOptions.map((opt) => (
-              opt.value === 'month' ? (
-                <MonthPresetChip
-                  key={opt.value}
-                  active={preset === 'month'}
-                  months={availableMonths}
-                  value={selectedMonth}
-                  onSelect={setSelectedMonth}
-                  onActivate={() => setPreset('month')}
-                />
-              ) : (
-                <button
-                  key={opt.value}
-                  onClick={() => setPreset(opt.value)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                    preset === opt.value
-                      ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                      : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[15px]">{opt.icon}</span>
-                  {opt.label}
-                </button>
-              )
-            ))}
-          </div>
-
-          {preset === 'custom' && (
-            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 pt-1">
-              <div>
-                <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Dari</label>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Sampai</label>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Breakdown Kategori ── */}
-        {summary.sorted.length > 0 && (
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-            <SectionTitle icon="category" label="Pengeluaran per Kategori" />
-            <div className="space-y-3">
-              {summary.sorted.slice(0, 5).map(([kat, total]) => {
-                const pct = summary.total > 0 ? Math.round((total / summary.total) * 100) : 0
-                return (
-                  <div key={kat}>
-                    <div className="flex justify-between text-xs mb-1.5">
-                      <span className="font-semibold text-on-surface flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[14px] text-primary">{katIcon(kat)}</span>
-                        {kat}
-                      </span>
-                      <span className="text-on-surface-variant font-medium">
-                        {fmtRupiah(total)} <span className="opacity-70">({pct}%)</span>
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-surface-container rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-error rounded-full transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-              {summary.sorted.length > 5 && (
-                <p className="text-[11px] text-on-surface-variant text-center pt-1">
-                  +{summary.sorted.length - 5} kategori lainnya
-                </p>
-              )}
-            </div>
           </div>
         )}
 
@@ -1092,10 +1056,8 @@ export default function PengeluaranPage() {
                 <button
                   key={k}
                   onClick={() => setFilterKat(filterKat === k ? 'all' : k)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all ${
-                    filterKat === k
-                      ? 'bg-primary text-white'
-                      : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                    filterKat === k ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant'
                   }`}
                 >
                   {k}
@@ -1122,53 +1084,45 @@ export default function PengeluaranPage() {
               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-12 bg-surface-container-lowest border border-outline-variant rounded-2xl">
-              <span className="material-symbols-outlined text-[48px] mb-2 block opacity-30">receipt_long</span>
-              <p className="text-sm font-semibold text-on-surface">
-                {expenses.length === 0 ? 'Belum ada pengeluaran' : 'Tidak ada di periode ini'}
-              </p>
-              <p className="text-xs text-on-surface-variant mt-1">
-                {expenses.length === 0
-                  ? 'Yuk mulai catat pengeluaran toko'
-                  : 'Coba ubah filter atau reset pencarian'}
-              </p>
+            <div className="text-center py-12 bg-surface-container-lowest border border-outline-variant rounded-2xl text-on-surface-variant">
+              <span className="material-symbols-outlined text-[40px] block mb-2 opacity-40">receipt_long</span>
+              <p className="text-sm">{expenses.length === 0 ? 'Belum ada pengeluaran' : 'Tidak ditemukan di periode ini'}</p>
             </div>
           ) : (
             <ul className="space-y-2.5">
               {filtered.map((exp) => (
-                <li
-                  key={exp.id}
-                  className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden hover:border-primary/30 transition-colors"
-                >
-                  <div className="p-4 flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${katColor(exp.kategori || 'Lainnya')}`}>
-                      <span className="material-symbols-outlined text-[20px] icon-fill">
-                        {katIcon(exp.kategori || 'Lainnya')}
-                      </span>
-                    </div>
-
+                <li key={exp.id} className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-on-surface break-words">
-                            {exp.nama_pengeluaran}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            {exp.kategori && (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${katColor(exp.kategori)}`}>
-                                {exp.kategori}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-outline flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px]">schedule</span>
-                              {fmtDate(exp.created_at)}
-                            </span>
-                          </div>
-                          {exp.keterangan && (
-                            <p className="text-[11px] text-on-surface-variant mt-1 truncate">
-                              {exp.keterangan}
-                            </p>
-                          )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-on-surface break-words">{exp.nama_pengeluaran}</p>
+                        {exp.kategori && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${katColor(exp.kategori)}`}>
+                            {exp.kategori}
+                          </span>
+                        )}
+                      </div>
+                      {exp.keterangan && (
+                        <p className="text-xs text-on-surface-variant mt-0.5 truncate">{exp.keterangan}</p>
+                      )}
+                      <p className="text-[11px] text-outline mt-1">{fmtDate(exp.created_at)}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0 min-[400px]:flex-row min-[400px]:items-center">
+                      <span className="text-sm font-extrabold text-error">{fmtRupiah(exp.nominal)}</span>
+                      {isAdmin && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setEditingExp(exp)}
+                            className="w-8 h-8 rounded-xl bg-surface-container flex items-center justify-center hover:bg-primary-container hover:text-primary transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(exp.id)}
+                            className="w-8 h-8 rounded-xl bg-surface-container flex items-center justify-center hover:bg-error-container hover:text-error transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
                         </div>
                         <span className="text-base font-extrabold text-error shrink-0 whitespace-nowrap">
                           -{fmtRupiah(exp.nominal)}
@@ -1205,10 +1159,10 @@ export default function PengeluaranPage() {
       {/* ─── MODAL EDIT PENGELUARAN ────────────────────────────────────────── */}
       {editingExp && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={(e) => e.target === e.currentTarget && closeEditModal()}
         >
-          <div className="w-full sm:max-w-md bg-surface-container-lowest border border-outline-variant rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-md bg-surface-container-lowest rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant sticky top-0 z-10 bg-surface-container-lowest rounded-t-3xl">
               <h3 className="text-base font-bold text-on-surface">Edit Pengeluaran</h3>
               <button onClick={closeEditModal} className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
@@ -1276,7 +1230,7 @@ export default function PengeluaranPage() {
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={(e) => e.target === e.currentTarget && !editKategoriSubmitting && setEditKategori(null)}
         >
-          <div className="w-full max-w-sm bg-surface-container-lowest border border-outline-variant rounded-3xl shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm bg-surface-container-lowest rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-6">
               <div className="w-14 h-14 rounded-full bg-primary-container flex items-center justify-center mx-auto mb-4">
                 <span className="material-symbols-outlined text-primary text-[28px]">edit</span>
@@ -1326,7 +1280,7 @@ export default function PengeluaranPage() {
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={(e) => e.target === e.currentTarget && !deleteKategoriSubmitting && setDeleteKategori(null)}
         >
-          <div className="w-full max-w-sm bg-surface-container-lowest border border-outline-variant rounded-3xl shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm bg-surface-container-lowest rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-6 text-center">
               <div className="w-14 h-14 rounded-full bg-error-container flex items-center justify-center mx-auto mb-4">
                 <span className="material-symbols-outlined text-error text-[28px]">label_off</span>
