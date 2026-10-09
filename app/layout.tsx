@@ -7,7 +7,7 @@ import Headbar from '@/components/layout/Headbar'
 import Sidebar from '@/components/layout/Sidebar'
 import BottomNav from '@/components/layout/ButtomNav'
 import { StoreProvider } from '@/lib/StoreProvider'
-import { AlertProvider } from '@/components/ui/Alert'   // ⬅️ TAMBAH
+import { AlertProvider } from '@/components/ui/Alert'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -36,14 +36,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-background text-on-surface min-h-screen">
         <StoreProvider>
-          <AlertProvider>  {/* ⬅️ BUNGKUS DENGAN ALERT PROVIDER */}
+          <AlertProvider>
             {isLoginPage ? (
               <main className="min-h-screen">{children}</main>
             ) : (
               <div className="flex flex-col min-h-screen">
                 <Headbar onMenuClick={() => setDrawerOpen(true)} />
                 <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-                <main className="flex-1 p-4 pb-20 lg:pb-4">
+                {/* ── padding horizontal mobile DIHAPUS biar page yang atur ── */}
+                <main className="flex-1 pt-3 pb-20 lg:px-6 lg:pt-4 lg:pb-4">
                   {children}
                 </main>
                 <div className="lg:hidden">
