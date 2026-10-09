@@ -422,7 +422,6 @@ function ExpenseForm({
 
   return (
     <div className="space-y-3">
-      {/* Nama */}
       <div>
         <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">
           Nama Pengeluaran <span className="text-error">*</span>
@@ -456,7 +455,6 @@ function ExpenseForm({
         {errors.kategori && <p className="text-[11px] text-error mt-1">Kategori wajib dipilih</p>}
       </div>
 
-      {/* Nominal */}
       <div>
         <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">
           Nominal <span className="text-error">*</span>
@@ -477,7 +475,6 @@ function ExpenseForm({
         {errors.nominal && <p className="text-[11px] text-error mt-1">Nominal harus angka lebih dari 0</p>}
       </div>
 
-      {/* Keterangan */}
       <div>
         <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">Keterangan</label>
         <input
@@ -489,7 +486,6 @@ function ExpenseForm({
         />
       </div>
 
-      {/* Actions */}
       <div className={`flex gap-2 ${onCancel ? '' : 'pt-1'}`}>
         {onCancel && (
           <button
@@ -556,11 +552,12 @@ export default function PengeluaranPage() {
   const [toast, setToast] = useState({ visible: false, message: '', success: true })
   const showToast = (message: string, success = true) => setToast({ visible: true, message, success })
 
-  // Form state
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [showForm, setShowForm] = useState(false)
 
-  // Edit modal
+  // Ref untuk auto-scroll ke form tambah
+  const addFormRef = useRef<HTMLDivElement>(null)
+
   const [editingExp, setEditingExp] = useState<Expense | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
 
@@ -568,7 +565,6 @@ export default function PengeluaranPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
-  // Filter/search
   const [search, setSearch] = useState('')
   const [filterKat, setFilterKat] = useState('all')
 
@@ -788,7 +784,6 @@ export default function PengeluaranPage() {
     if (filterKat !== 'all' && !allKategori.includes(filterKat)) setFilterKat('all')
   }, [allKategori, filterKat])
 
-  // ── Handlers ──
   const handleAdd = async (form: typeof blankForm) => {
     if (!form.nama.trim()) { showToast('Nama pengeluaran wajib diisi', false); return }
     if (!form.kategori.trim()) { showToast('Kategori wajib dipilih', false); return }
@@ -848,7 +843,6 @@ export default function PengeluaranPage() {
     }
   }
 
-  // ── Loading ──
   if (!storeReady) {
     return (
       <div className="flex flex-col min-h-screen bg-surface">
@@ -862,6 +856,8 @@ export default function PengeluaranPage() {
       </div>
     )
   }
+
+  const periodeText = getPeriodRange(preset, selectedMonth, customFrom, customTo).label
 
   return (
     <div className="flex flex-col min-h-screen bg-surface">
@@ -877,7 +873,7 @@ export default function PengeluaranPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-[22px] font-extrabold text-on-surface">Pengeluaran</h1>
-            <p className="text-sm text-on-surface-variant mt-0.5">Catat semua pengeluaran toko</p>
+            <p className="text-sm text-on-surface-variant font-medium mt-0.5">Catat semua pengeluaran toko</p>
           </div>
           {isAdmin && !showForm && (
             <button
@@ -968,19 +964,38 @@ export default function PengeluaranPage() {
             <div className="w-8 h-8 rounded-xl bg-primary-container flex items-center justify-center mb-2">
               <span className="material-symbols-outlined text-primary text-[16px] icon-fill">category</span>
             </div>
-            <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Terbesar</p>
-            <p className="text-sm font-extrabold text-on-surface mt-0.5 truncate">
-              {summary.topKat ? summary.topKat[0] : '-'}
+            <p className="text-3xl font-extrabold mt-1.5 tracking-tight">
+              {fmtRupiah(summary.total)}
             </p>
-            {summary.topKat && (
-              <p className="text-[11px] text-on-surface-variant">{fmtRupiah(summary.topKat[1])}</p>
-            )}
+            <div className="flex items-center gap-3 mt-3 text-[11px] font-medium opacity-90 flex-wrap">
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px]">receipt_long</span>
+                {summary.count} item
+              </span>
+              <span className="w-1 h-1 rounded-full bg-white/60" />
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px]">category</span>
+                {summary.sorted.length} kategori
+              </span>
+              {summary.topKat && (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-white/60" />
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[13px]">trending_up</span>
+                    Terbesar: {summary.topKat[0]}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* ── Form Tambah (collapsible) ── */}
+        {/* ── Form Tambah (tepat di bawah hero card) ── */}
         {isAdmin && showForm && (
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
+          <div
+            ref={addFormRef}
+            className="bg-surface-container-lowest border-2 border-primary/40 rounded-2xl p-4 shadow-lg shadow-primary/10 scroll-mt-4 animate-in fade-in slide-in-from-top-2 duration-300"
+          >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-on-surface">Tambah Pengeluaran</h2>
               <button onClick={closeAddForm} className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center">
@@ -1000,24 +1015,39 @@ export default function PengeluaranPage() {
           </div>
         )}
 
-        {/* ── Filter / search ── */}
-        <div className="space-y-2">
+        {/* ── Filter & Search ── */}
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
+          <SectionTitle
+            icon="filter_alt"
+            label="Filter & Pencarian"
+            right={
+              <span className="text-[11px] text-on-surface-variant font-medium">
+                {filtered.length} hasil
+              </span>
+            }
+          />
+
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">
+              search
+            </span>
             <input
               type="text"
               placeholder="Cari pengeluaran..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-10 pl-9 pr-3 bg-surface-container border border-outline-variant rounded-full text-sm focus:border-primary outline-none transition-colors"
+              className="w-full h-11 pl-10 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none transition-colors"
             />
           </div>
+
           {allKategori.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+            <div className="flex gap-1.5 flex-wrap">
               <button
                 onClick={() => setFilterKat('all')}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  filterKat === 'all' ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant'
+                className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+                  filterKat === 'all'
+                    ? 'bg-primary text-white'
+                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
                 }`}
               >
                 Semua
@@ -1039,9 +1069,12 @@ export default function PengeluaranPage() {
 
         {/* ── List ── */}
         <div>
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-sm font-bold text-on-surface">Riwayat Pengeluaran</h2>
-            <span className="text-xs text-on-surface-variant bg-surface-container px-2 py-1 rounded-full">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary">list_alt</span>
+              <h2 className="text-sm font-bold text-on-surface">Riwayat Pengeluaran</h2>
+            </div>
+            <span className="text-[11px] text-on-surface-variant bg-surface-container px-2 py-1 rounded-full font-semibold">
               {filtered.length} item
             </span>
           </div>
@@ -1056,7 +1089,7 @@ export default function PengeluaranPage() {
               <p className="text-sm">{expenses.length === 0 ? 'Belum ada pengeluaran' : 'Tidak ditemukan di periode ini'}</p>
             </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
               {filtered.map((exp) => (
                 <li key={exp.id} className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -1091,9 +1124,31 @@ export default function PengeluaranPage() {
                             <span className="material-symbols-outlined text-[16px]">delete</span>
                           </button>
                         </div>
-                      )}
+                        <span className="text-base font-extrabold text-error shrink-0 whitespace-nowrap">
+                          -{fmtRupiah(exp.nominal)}
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  {isAdmin && (
+                    <div className="border-t border-outline-variant/50 px-4 py-2 flex items-center justify-end gap-2 bg-surface-container/40">
+                      <button
+                        onClick={() => setEditingExp(exp)}
+                        className="h-8 px-3 rounded-lg bg-yellow-400/15 text-yellow-700 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">edit</span>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleteId(exp.id)}
+                        className="h-8 px-3 rounded-lg bg-error-container/60 text-error text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                        Hapus
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -1142,7 +1197,7 @@ export default function PengeluaranPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={(e) => e.target === e.currentTarget && !deleteSubmitting && setDeleteId(null)}
         >
-          <div className="w-full max-w-sm bg-surface-container-lowest rounded-3xl shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm bg-surface-container-lowest border border-outline-variant rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-6 text-center">
               <div className="w-14 h-14 rounded-full bg-error-container flex items-center justify-center mx-auto mb-4">
                 <span className="material-symbols-outlined text-error text-[28px]">delete_forever</span>
@@ -1261,4 +1316,4 @@ export default function PengeluaranPage() {
       <BottomNavbar />
     </div>
   )
-}
+} 
