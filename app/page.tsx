@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { useAppStore, useUser } from '@/lib/Store'
 import Badge from '@/components/ui/Badge'
 import Guard from '@/components/auth/Guard'
-import BottomNavbar from '@/components/layout/ButtomNav'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function fmtRupiah(n: number) {
@@ -587,8 +586,8 @@ function DashboardContent() {
   }))
 
   return (
-    <div className="flex flex-col min-h-screen bg-surface">
-      <main className="flex-1 p-4 pb-24 space-y-4 w-full max-w-3xl mx-auto">
+    <div className="w-full space-y-4 lg:space-y-6">
+      <div className="space-y-4 lg:space-y-6 w-full">
         {/* ── Header ── */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -606,7 +605,7 @@ function DashboardContent() {
         </div>
 
         {/* ── 3 Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 xl:gap-5">
           {/* Pendapatan */}
           <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/80 rounded-2xl p-4 text-white shadow-lg shadow-primary/20">
             <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" />
@@ -701,7 +700,7 @@ function DashboardContent() {
         </div>
 
         {/* ── Antrian & Chart ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 xl:gap-6">
           {/* Antrian */}
           <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
             <SectionTitle
@@ -837,8 +836,7 @@ function DashboardContent() {
             )}
           </div>
         </div>
-      </main>
-      <BottomNavbar />
+      </div>
     </div>
   )
 }

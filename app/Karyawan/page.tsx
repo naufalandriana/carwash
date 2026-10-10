@@ -307,7 +307,7 @@ function OperatorContent() {
   }
 
   return (
-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">
+    <div className="w-full space-y-5">
       <Toast {...toast} onHide={() => setToast(t => ({ ...t, visible: false }))} />
 
       {/* ═══ Header ═══ */}

@@ -1,0 +1,1839 @@
+[1mdiff --git a/app/Karyawan/page.tsx b/app/Karyawan/page.tsx[m
+[1mindex 31b1607..e29f49d 100644[m
+[1m--- a/app/Karyawan/page.tsx[m
+[1m+++ b/app/Karyawan/page.tsx[m
+[36m@@ -307,7 +307,7 @@[m [mfunction OperatorContent() {[m
+   }[m
+ [m
+   return ([m
+[31m-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">[m
+[32m+[m[32m    <div className="w-full space-y-5">[m
+       <Toast {...toast} onHide={() => setToast(t => ({ ...t, visible: false }))} />[m
+ [m
+       {/* ═══ Header ═══ */}[m
+[1mdiff --git a/app/Kendaraan/page.tsx b/app/Kendaraan/page.tsx[m
+[1mindex b557cb2..4e1b922 100644[m
+[1m--- a/app/Kendaraan/page.tsx[m
+[1m+++ b/app/Kendaraan/page.tsx[m
+[36m@@ -60,7 +60,7 @@[m [mfunction KendaraanContent() {[m
+       .sort((a, b) => a.name.localeCompare(b.name))[m
+   }, [vehiclesDB, search, filterType])[m
+ [m
+[31m-  const handleAdd = (e: React.FormEvent) => {[m
+[32m+[m[32m  const handleAdd = async (e: React.FormEvent) => {[m
+     e.preventDefault()[m
+     const pExp = parseRupiahInput(priceExpres)[m
+     const pHid = parseRupiahInput(priceHidrolik)[m
+[36m@@ -77,19 +77,26 @@[m [mfunction KendaraanContent() {[m
+       return[m
+     }[m
+ [m
+[31m-    // ⬇️ Yang masuk ke DB: angka bersih (number)[m
+[31m-    addVehicle({[m
+[31m-      name: name.trim(),[m
+[31m-      tipe,[m
+[31m-      price_expres: pExp,[m
+[31m-      price_hidrolik: pHid,[m
+[31m-    })[m
+[31m-[m
+[31m-    setName('')[m
+[31m-    setTipe('mobil')[m
+[31m-    setPriceExpres('')[m
+[31m-    setPriceHidrolik('')[m
+[31m-    showToast('Kendaraan berhasil ditambahkan')[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      await addVehicle({[m
+[32m+[m[32m        name: name.trim(),[m
+[32m+[m[32m        tipe,[m
+[32m+[m[32m        price_expres: pExp,[m
+[32m+[m[32m        price_hidrolik: pHid,[m
+[32m+[m[32m      })[m
+[32m+[m[32m      const storeError = useAppStore.getState().error[m
+[32m+[m[32m      if (storeError) {[m
+[32m+[m[32m        showToast(storeError, false)[m
+[32m+[m[32m        return[m
+[32m+[m[32m      }[m
+[32m+[m[32m      setName('')[m
+[32m+[m[32m      setTipe('mobil')[m
+[32m+[m[32m      setPriceExpres('')[m
+[32m+[m[32m      setPriceHidrolik('')[m
+[32m+[m[32m      showToast('Kendaraan berhasil ditambahkan')[m
+[32m+[m[32m    } catch (err: any) {[m
+[32m+[m[32m      showToast(err?.message || 'Gagal menambahkan kendaraan', false)[m
+[32m+[m[32m    }[m
+   }[m
+ [m
+   // ── Open confirm modal ──[m
+[36m@@ -98,22 +105,27 @@[m [mfunction KendaraanContent() {[m
+   }[m
+ [m
+   // ── Konfirmasi hapus ──[m
+[31m-  const handleConfirmDelete = () => {[m
+[32m+[m[32m  const handleConfirmDelete = async () => {[m
+     if (!deleteTarget) return[m
+     setDeleting(true)[m
+     try {[m
+[31m-      deleteVehicle(deleteTarget.id)[m
+[32m+[m[32m      await deleteVehicle(deleteTarget.id)[m
+[32m+[m[32m      const storeError = useAppStore.getState().error[m
+[32m+[m[32m      if (storeError) {[m
+[32m+[m[32m        showToast(storeError, false)[m
+[32m+[m[32m        return[m
+[32m+[m[32m      }[m
+       showToast(`"${deleteTarget.name}" dihapus`)[m
+       setDeleteTarget(null)[m
+[31m-    } catch {[m
+[31m-      showToast('Gagal menghapus kendaraan', false)[m
+[32m+[m[32m    } catch (err: any) {[m
+[32m+[m[32m      showToast(err?.message || 'Gagal menghapus kendaraan', false)[m
+     } finally {[m
+       setDeleting(false)[m
+     }[m
+   }[m
+ [m
+   return ([m
+[31m-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">[m
+[32m+[m[32m    <div className="w-full space-y-5">[m
+       {/* Header */}[m
+       <div>[m
+         <h2 className="text-[22px] font-extrabold text-on-surface">Data Kendaraan</h2>[m
+[1mdiff --git a/app/Laporan/page.tsx b/app/Laporan/page.tsx[m
+[1mindex 28321c3..9901f97 100644[m
+[1m--- a/app/Laporan/page.tsx[m
+[1m+++ b/app/Laporan/page.tsx[m
+[36m@@ -328,6 +328,148 @@[m [mfunction SectionTitle({ icon, label, right }: { icon: string; label: string; rig[m
+   )[m
+ }[m
+ [m
+[32m+[m[32m// ─── Compact dropdown filter cards — Laporan ─────────────────────────────────[m
+[32m+[m[32m// Periode (laporan) + Riwayat filter — collapsed by default, expand in-card.[m
+[32m+[m
+[32m+[m[32mfunction FilterCard(props: {[m
+[32m+[m[32m  preset: PresetKey[m
+[32m+[m[32m  setPreset: (p: PresetKey) => void[m
+[32m+[m[32m  customFrom: string[m
+[32m+[m[32m  customTo: string[m
+[32m+[m[32m  setCustomFrom: (v: string) => void[m
+[32m+[m[32m  setCustomTo: (v: string) => void[m
+[32m+[m[32m  availableMonths: { value: string; label: string }[][m
+[32m+[m[32m  selectedMonth: string[m
+[32m+[m[32m  setSelectedMonth: (v: string) => void[m
+[32m+[m[32m  currentMonthLabel: string[m
+[32m+[m[32m  reportTab: 'transaksi' | 'pengeluaran'[m
+[32m+[m[32m  reportFilters: { type: 'all' | 'mobil' | 'motor'; model: string; layanan: string }[m
+[32m+[m[32m  setReportFilters: React.Dispatch<React.SetStateAction<{ type: 'all' | 'mobil' | 'motor'; model: string; layanan: string }>>[m
+[32m+[m[32m  reportModelOptions: string[][m
+[32m+[m[32m  reportLayananOptions: string[][m
+[32m+[m[32m  reportLoading: boolean[m
+[32m+[m[32m  handleRefresh: () => void[m
+[32m+[m[32m  reportFilteredLength: number[m
+[32m+[m[32m  expenseFilteredLength: number[m
+[32m+[m[32m  periodeText: string[m
+[32m+[m[32m}) {[m
+[32m+[m[32m  const [open, setOpen] = useState(false)[m
+[32m+[m[32m  const { preset, setPreset, customFrom, customTo, setCustomFrom, setCustomTo, availableMonths, selectedMonth, setSelectedMonth, currentMonthLabel, reportTab, reportFilters, setReportFilters, reportModelOptions, reportLayananOptions, reportLoading, handleRefresh, reportFilteredLength, expenseFilteredLength, periodeText } = props[m
+[32m+[m[32m  const count = reportTab === 'transaksi' ? reportFilteredLength : expenseFilteredLength[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">[m
+[32m+[m[32m      <button[m
+[32m+[m[32m        type="button"[m
+[32m+[m[32m        onClick={() => setOpen((v) => !v)}[m
+[32m+[m[32m        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container/50 transition-colors"[m
+[32m+[m[32m        aria-expanded={open}[m
+[32m+[m[32m      >[m
+[32m+[m[32m        <span className="flex items-center gap-2 min-w-0">[m
+[32m+[m[32m          <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span></span>[m
+[32m+[m[32m          <span className="min-w-0">[m
+[32m+[m[32m            <span className="block text-xs font-bold text-on-surface leading-none">Periode &amp; Filter</span>[m
+[32m+[m[32m            <span className="block text-[11px] text-on-surface-variant truncate">{periodeText} · {count} {reportTab === 'transaksi' ? 'transaksi' : 'item'}</span>[m
+[32m+[m[32m          </span>[m
+[32m+[m[32m        </span>[m
+[32m+[m[32m        <span className="flex items-center gap-2 shrink-0">[m
+[32m+[m[32m          <span className="hidden sm:inline text-[11px] text-primary font-semibold">{open ? 'Tutup' : 'Ubah'}</span>[m
+[32m+[m[32m          <span className={`material-symbols-outlined text-on-surface-variant text-[20px] transition-transform ${open ? 'rotate-180' : ''}`}>expand_more</span>[m
+[32m+[m[32m        </span>[m
+[32m+[m[32m      </button>[m
+[32m+[m[32m      {open && ([m
+[32m+[m[32m        <div className="px-4 pb-4 pt-3 border-t border-outline-variant/50 space-y-3 bg-surface-container/20">[m
+[32m+[m[32m          <div className="flex items-center justify-between">[m
+[32m+[m[32m            <span className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Periode</span>[m
+[32m+[m[32m            <button onClick={handleRefresh} disabled={reportLoading} className="h-7 px-2.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center gap-1 disabled:opacity-50">[m
+[32m+[m[32m              <span className="material-symbols-outlined text-[14px]">{reportLoading ? 'hourglass_top' : 'refresh'}</span> Refresh[m
+[32m+[m[32m            </button>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">[m
+[32m+[m[32m            {presetOptions.map((opt) =>[m
+[32m+[m[32m              opt.value === 'month' ? ([m
+[32m+[m[32m                <MonthPresetChip key={opt.value} active={preset === 'month'} months={availableMonths} value={selectedMonth} onSelect={setSelectedMonth} onActivate={() => setPreset('month')} />[m
+[32m+[m[32m              ) : ([m
+[32m+[m[32m                <button key={opt.value} onClick={() => setPreset(opt.value)} className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${preset === opt.value ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}> <span className="material-symbols-outlined text-[14px]">{opt.icon}</span> {opt.label}</button>[m
+[32m+[m[32m              )[m
+[32m+[m[32m            )}[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          {preset === 'custom' && ([m
+[32m+[m[32m            <div className="grid grid-cols-2 gap-2">[m
+[32m+[m[32m              <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Dari</label><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-full h-9 px-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>[m
+[32m+[m[32m              <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Sampai</label><input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="w-full h-9 px-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m          )}[m
+[32m+[m[32m          {reportTab === 'transaksi' && ([m
+[32m+[m[32m            <div className="grid grid-cols-3 gap-2">[m
+[32m+[m[32m              <Dropdown options={[{ value: 'all', label: 'Semua' }, { value: 'mobil', label: 'Mobil' }, { value: 'motor', label: 'Motor' }]} value={reportFilters.type} onChange={(v) => setReportFilters((f) => ({ ...f, type: v as any, model: 'all' }))} />[m
+[32m+[m[32m              <Dropdown options={[{ value: 'all', label: 'Model' }, ...reportModelOptions.filter((m) => m !== 'all').map((m) => ({ value: m, label: m }))]} value={reportFilters.model} onChange={(v) => setReportFilters((f) => ({ ...f, model: v }))} />[m
+[32m+[m[32m              <Dropdown options={[{ value: 'all', label: 'Layanan' }, ...reportLayananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l }))]} value={reportFilters.layanan} onChange={(v) => setReportFilters((f) => ({ ...f, layanan: v }))} />[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m          )}[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      )}[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction HistoryFilterCard(props: {[m
+[32m+[m[32m  search: string[m
+[32m+[m[32m  setSearch: (v: string) => void[m
+[32m+[m[32m  filterType: 'all' | 'mobil' | 'motor'[m
+[32m+[m[32m  setFilterType: (v: 'all' | 'mobil' | 'motor') => void[m
+[32m+[m[32m  filterModel: string[m
+[32m+[m[32m  setFilterModel: (v: string) => void[m
+[32m+[m[32m  filterLayanan: string[m
+[32m+[m[32m  setFilterLayanan: (v: string) => void[m
+[32m+[m[32m  filterStatus: 'all' | 'Menunggu' | 'Proses' | 'Selesai'[m
+[32m+[m[32m  setFilterStatus: (v: 'all' | 'Menunggu' | 'Proses' | 'Selesai') => void[m
+[32m+[m[32m  modelOptionsFilter: string[][m
+[32m+[m[32m  layananOptions: string[][m
+[32m+[m[32m  filteredTxLength: number[m
+[32m+[m[32m  historyStats: { menunggu: number; proses: number; selesai: number }[m
+[32m+[m[32m  hasActiveFilter: boolean[m
+[32m+[m[32m  resetFilters: () => void[m
+[32m+[m[32m}) {[m
+[32m+[m[32m  const [open, setOpen] = useState(false)[m
+[32m+[m[32m  const { search, setSearch, filterType, setFilterType, filterModel, setFilterModel, filterLayanan, setFilterLayanan, filterStatus, setFilterStatus, modelOptionsFilter, layananOptions, filteredTxLength, historyStats, hasActiveFilter, resetFilters } = props[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">[m
+[32m+[m[32m      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container/50 transition-colors" aria-expanded={open}>[m
+[32m+[m[32m        <span className="flex items-center gap-2 min-w-0">[m
+[32m+[m[32m          <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary text-[18px]">filter_alt</span></span>[m
+[32m+[m[32m          <span className="min-w-0"><span className="block text-xs font-bold text-on-surface leading-none">Filter &amp; Pencarian</span><span className="block text-[11px] text-on-surface-variant truncate">{filteredTxLength} hasil{hasActiveFilter ? ' · filter aktif' : ''}</span></span>[m
+[32m+[m[32m        </span>[m
+[32m+[m[32m        <span className="flex items-center gap-2 shrink-0">[m
+[32m+[m[32m          {hasActiveFilter && <span onClick={(e) => { e.stopPropagation(); resetFilters() }} className="hidden sm:inline-flex h-7 px-2.5 rounded-full bg-error-container text-error text-[11px] font-semibold items-center gap-1"><span className="material-symbols-outlined text-[14px]">close</span> Reset</span>}[m
+[32m+[m[32m          <span className={`material-symbols-outlined text-on-surface-variant text-[20px] transition-transform ${open ? 'rotate-180' : ''}`}>expand_more</span>[m
+[32m+[m[32m        </span>[m
+[32m+[m[32m      </button>[m
+[32m+[m[32m      {open && ([m
+[32m+[m[32m        <div className="px-4 pb-4 pt-3 border-t border-outline-variant/50 space-y-3 bg-surface-container/20">[m
+[32m+[m[32m          <div className="relative">[m
+[32m+[m[32m            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">search</span>[m
+[32m+[m[32m            <input type="text" placeholder="Cari plat, model, tipe, atau operator..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-10 pl-10 pr-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none" />[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <div className="grid grid-cols-3 gap-2">[m
+[32m+[m[32m            <Dropdown options={[{ value: 'all', label: 'Kendaraan' }, { value: 'mobil', label: 'Mobil' }, { value: 'motor', label: 'Motor' }]} value={filterType} onChange={(v) => { setFilterType(v as any); setFilterModel('all') }} />[m
+[32m+[m[32m            <Dropdown options={[{ value: 'all', label: 'Model' }, ...modelOptionsFilter.filter((m) => m !== 'all').map((m) => ({ value: m, label: m }))]} value={filterModel} onChange={setFilterModel} />[m
+[32m+[m[32m            <Dropdown options={[{ value: 'all', label: 'Layanan' }, ...layananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l }))]} value={filterLayanan} onChange={setFilterLayanan} />[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <div className="flex gap-1.5 flex-wrap">[m
+[32m+[m[32m            <button onClick={() => setFilterStatus('all')} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${filterStatus === 'all' ? 'bg-primary text-white' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}>Semua ({filteredTxLength})</button>[m
+[32m+[m[32m            {(['Menunggu', 'Proses', 'Selesai'] as const).map((st) => {[m
+[32m+[m[32m              const s = STATUS_STYLE[st][m
+[32m+[m[32m              const count = st === 'Menunggu' ? historyStats.menunggu : st === 'Proses' ? historyStats.proses : historyStats.selesai[m
+[32m+[m[32m              const isActive = filterStatus === st[m
+[32m+[m[32m              return <button key={st} onClick={() => setFilterStatus(isActive ? 'all' : st)} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold flex items-center gap-1.5 transition-all ${isActive ? `${s.bg} ${s.text} ring-2 ring-offset-1 ring-current` : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{st} ({count})</button>[m
+[32m+[m[32m            })}[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      )}[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+ // ─── Status chip config ──────────────────────────────────────────────────────[m
+ const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string; icon: string }> = {[m
+   Menunggu: { bg: 'bg-error-container', text: 'text-error', dot: 'bg-error', icon: 'schedule' },[m
+[36m@@ -915,7 +1057,7 @@[m [mfunction LaporanContent() {[m
+   const exportHandler = reportTab === 'transaksi' ? exportToExcel : exportExpensesToExcel[m
+ [m
+   return ([m
+[31m-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">[m
+[32m+[m[32m    <div className="w-full space-y-5">[m
+       <Toast {...toast} onHide={() => setToast((t) => ({ ...t, visible: false }))} />[m
+ [m
+       {/* ═══ Header ═══ */}[m
+[36m@@ -1000,121 +1142,29 @@[m [mfunction LaporanContent() {[m
+             </div>[m
+           </div>[m
+ [m
+[31m-          {/* Periode Card */}[m
+[31m-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">[m
+[31m-            <SectionTitle[m
+[31m-              icon="calendar_month"[m
+[31m-              label="Periode Laporan"[m
+[31m-              right={[m
+[31m-                <button[m
+[31m-                  onClick={handleRefresh}[m
+[31m-                  disabled={reportLoading}[m
+[31m-                  className="h-8 px-3 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center gap-1 transition disabled:opacity-50"[m
+[31m-                >[m
+[31m-                  <span className="material-symbols-outlined text-[16px]">[m
+[31m-                    {reportLoading ? 'hourglass_top' : 'refresh'}[m
+[31m-                  </span>[m
+[31m-                  {reportLoading ? 'Memuat' : 'Refresh'}[m
+[31m-                </button>[m
+[31m-              }[m
+[31m-            />[m
+[31m-[m
+[31m-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">[m
+[31m-              {presetOptions.map((opt) =>[m
+[31m-                opt.value === 'month' ? ([m
+[31m-                  <MonthPresetChip[m
+[31m-                    key={opt.value}[m
+[31m-                    active={preset === 'month'}[m
+[31m-                    months={availableMonths}[m
+[31m-                    value={selectedMonth}[m
+[31m-                    onSelect={setSelectedMonth}[m
+[31m-                    onActivate={() => setPreset('month')}[m
+[31m-                  />[m
+[31m-                ) : ([m
+[31m-                  <button[m
+[31m-                    key={opt.value}[m
+[31m-                    onClick={() => setPreset(opt.value)}[m
+[31m-                    className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${[m
+[31m-                      preset === opt.value[m
+[31m-                        ? 'bg-primary text-white shadow-sm shadow-primary/30'[m
+[31m-                        : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'[m
+[31m-                    }`}[m
+[31m-                  >[m
+[31m-                    <span className="material-symbols-outlined text-[15px]">{opt.icon}</span>[m
+[31m-                    {opt.label}[m
+[31m-                  </button>[m
+[31m-                )[m
+[31m-              )}[m
+[31m-            </div>[m
+[31m-[m
+[31m-            {preset === 'custom' && ([m
+[31m-              <div className="grid grid-cols-2 gap-2 pt-1">[m
+[31m-                <div>[m
+[31m-                  <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">[m
+[31m-                    Dari[m
+[31m-                  </label>[m
+[31m-                  <input[m
+[31m-                    type="date"[m
+[31m-                    value={customFrom}[m
+[31m-                    onChange={(e) => setCustomFrom(e.target.value)}[m
+[31m-                    className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"[m
+[31m-                  />[m
+[31m-                </div>[m
+[31m-                <div>[m
+[31m-                  <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">[m
+[31m-                    Sampai[m
+[31m-                  </label>[m
+[31m-                  <input[m
+[31m-                    type="date"[m
+[31m-                    value={customTo}[m
+[31m-                    onChange={(e) => setCustomTo(e.target.value)}[m
+[31m-                    className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"[m
+[31m-                  />[m
+[31m-                </div>[m
+[31m-              </div>[m
+[31m-            )}[m
+[31m-[m
+[31m-            {reportTab === 'transaksi' && ([m
+[31m-              <div className="grid grid-cols-3 gap-2 pt-1">[m
+[31m-                <Dropdown[m
+[31m-                  options={[[m
+[31m-                    { value: 'all', label: 'Semua' },[m
+[31m-                    { value: 'mobil', label: 'Mobil' },[m
+[31m-                    { value: 'motor', label: 'Motor' },[m
+[31m-                  ]}[m
+[31m-                  value={reportFilters.type}[m
+[31m-                  onChange={(v) => setReportFilters((f) => ({ ...f, type: v as any, model: 'all' }))}[m
+[31m-                />[m
+[31m-                <Dropdown[m
+[31m-                  options={[[m
+[31m-                    { value: 'all', label: 'Model' },[m
+[31m-                    ...reportModelOptions.filter((m) => m !== 'all').map((m) => ({ value: m, label: m })),[m
+[31m-                  ]}[m
+[31m-                  value={reportFilters.model}[m
+[31m-                  onChange={(v) => setReportFilters((f) => ({ ...f, model: v }))}[m
+[31m-                />[m
+[31m-                <Dropdown[m
+[31m-                  options={[[m
+[31m-                    { value: 'all', label: 'Layanan' },[m
+[31m-                    ...reportLayananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l })),[m
+[31m-                  ]}[m
+[31m-                  value={reportFilters.layanan}[m
+[31m-                  onChange={(v) => setReportFilters((f) => ({ ...f, layanan: v }))}[m
+[31m-                />[m
+[31m-              </div>[m
+[31m-            )}[m
+[31m-[m
+[31m-            <div className="flex items-center justify-between pt-2 border-t border-outline-variant/50">[m
+[31m-              <span className="text-xs text-on-surface-variant font-medium">[m
+[31m-                {reportLoading[m
+[31m-                  ? 'Memuat data...'[m
+[31m-                  : reportTab === 'transaksi'[m
+[31m-                    ? `${reportFiltered.length} transaksi`[m
+[31m-                    : `${expenseStats.filtered.length} pengeluaran`}[m
+[31m-              </span>[m
+[31m-              <span className="text-[11px] text-primary font-semibold">{periodeText}</span>[m
+[31m-            </div>[m
+[31m-          </div>[m
+[32m+[m[32m          {/* Periode — compact dropdown card */}[m
+[32m+[m[32m          <FilterCard[m
+[32m+[m[32m            preset={preset}[m
+[32m+[m[32m            setPreset={setPreset}[m
+[32m+[m[32m            customFrom={customFrom}[m
+[32m+[m[32m            customTo={customTo}[m
+[32m+[m[32m            setCustomFrom={setCustomFrom}[m
+[32m+[m[32m            setCustomTo={setCustomTo}[m
+[32m+[m[32m            availableMonths={availableMonths}[m
+[32m+[m[32m            selectedMonth={selectedMonth}[m
+[32m+[m[32m            setSelectedMonth={setSelectedMonth}[m
+[32m+[m[32m            currentMonthLabel={currentMonthLabel}[m
+[32m+[m[32m            reportTab={reportTab}[m
+[32m+[m[32m            reportFilters={reportFilters}[m
+[32m+[m[32m            setReportFilters={setReportFilters}[m
+[32m+[m[32m            reportModelOptions={reportModelOptions}[m
+[32m+[m[32m            reportLayananOptions={reportLayananOptions}[m
+[32m+[m[32m            reportLoading={reportLoading}[m
+[32m+[m[32m            handleRefresh={handleRefresh}[m
+[32m+[m[32m            reportFilteredLength={reportFiltered.length}[m
+[32m+[m[32m            expenseFilteredLength={expenseStats.filtered.length}[m
+[32m+[m[32m            periodeText={periodeText}[m
+[32m+[m[32m          />[m
+ [m
+           {/* Sub-tab */}[m
+           <div className="flex bg-surface-container-lowest border border-outline-variant rounded-xl p-1 gap-1">[m
+[36m@@ -1483,108 +1533,25 @@[m [mfunction LaporanContent() {[m
+             </div>[m
+           </div>[m
+ [m
+[31m-          {/* ═══ Filter Bar ═══ */}[m
+[31m-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">[m
+[31m-            <SectionTitle[m
+[31m-              icon="filter_alt"[m
+[31m-              label="Filter & Pencarian"[m
+[31m-              right={[m
+[31m-                hasActiveFilter ? ([m
+[31m-                  <button[m
+[31m-                    onClick={resetFilters}[m
+[31m-                    className="h-7 px-2.5 rounded-full bg-error-container text-error text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all"[m
+[31m-                  >[m
+[31m-                    <span className="material-symbols-outlined text-[14px]">close</span>[m
+[31m-                    Reset[m
+[31m-                  </button>[m
+[31m-                ) : ([m
+[31m-                  <span className="text-[11px] text-on-surface-variant font-medium">[m
+[31m-                    {filteredTx.length} hasil[m
+[31m-                  </span>[m
+[31m-                )[m
+[31m-              }[m
+[31m-            />[m
+[31m-[m
+[31m-            <div className="relative">[m
+[31m-              <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">[m
+[31m-                search[m
+[31m-              </span>[m
+[31m-              <input[m
+[31m-                type="text"[m
+[31m-                placeholder="Cari plat, model, tipe, atau operator..."[m
+[31m-                value={search}[m
+[31m-                onChange={(e) => setSearch(e.target.value)}[m
+[31m-                className="w-full h-11 pl-10 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none"[m
+[31m-              />[m
+[31m-            </div>[m
+[31m-[m
+[31m-            <div className="flex gap-2">[m
+[31m-              <Dropdown[m
+[31m-                options={[[m
+[31m-                  { value: 'all', label: 'Kendaraan' },[m
+[31m-                  { value: 'mobil', label: 'Mobil' },[m
+[31m-                  { value: 'motor', label: 'Motor' },[m
+[31m-                ]}[m
+[31m-                value={filterType}[m
+[31m-                onChange={(v) => { setFilterType(v as any); setFilterModel('all') }}[m
+[31m-                className="flex-1"[m
+[31m-              />[m
+[31m-              <Dropdown[m
+[31m-                options={[[m
+[31m-                  { value: 'all', label: 'Model' },[m
+[31m-                  ...modelOptionsFilter.filter((m) => m !== 'all').map((m) => ({ value: m, label: m })),[m
+[31m-                ]}[m
+[31m-                value={filterModel}[m
+[31m-                onChange={setFilterModel}[m
+[31m-                className="flex-1"[m
+[31m-              />[m
+[31m-              <Dropdown[m
+[31m-                options={[[m
+[31m-                  { value: 'all', label: 'Layanan' },[m
+[31m-                  ...layananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l })),[m
+[31m-                ]}[m
+[31m-                value={filterLayanan}[m
+[31m-                onChange={setFilterLayanan}[m
+[31m-                className="flex-1"[m
+[31m-              />[m
+[31m-            </div>[m
+[31m-[m
+[31m-            {/* Status chips */}[m
+[31m-            <div className="flex gap-1.5 flex-wrap">[m
+[31m-              <button[m
+[31m-                onClick={() => setFilterStatus('all')}[m
+[31m-                className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${[m
+[31m-                  filterStatus === 'all'[m
+[31m-                    ? 'bg-primary text-white'[m
+[31m-                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'[m
+[31m-                }`}[m
+[31m-              >[m
+[31m-                Semua ({filteredTx.length})[m
+[31m-              </button>[m
+[31m-              {(['Menunggu', 'Proses', 'Selesai'] as const).map((st) => {[m
+[31m-                const s = STATUS_STYLE[st][m
+[31m-                const count =[m
+[31m-                  st === 'Menunggu' ? historyStats.menunggu[m
+[31m-                    : st === 'Proses' ? historyStats.proses[m
+[31m-                      : historyStats.selesai[m
+[31m-                const isActive = filterStatus === st[m
+[31m-                return ([m
+[31m-                  <button[m
+[31m-                    key={st}[m
+[31m-                    onClick={() => setFilterStatus(isActive ? 'all' : st)}[m
+[31m-                    className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all flex items-center gap-1.5 ${[m
+[31m-                      isActive[m
+[31m-                        ? `${s.bg} ${s.text} ring-2 ring-offset-1 ring-current`[m
+[31m-                        : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'[m
+[31m-                    }`}[m
+[31m-                  >[m
+[31m-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />[m
+[31m-                    {st} ({count})[m
+[31m-                  </button>[m
+[31m-                )[m
+[31m-              })}[m
+[31m-            </div>[m
+[31m-          </div>[m
+[32m+[m[32m          {/* ═══ Filter Bar — compact dropdown card ═══ */}[m
+[32m+[m[32m          <HistoryFilterCard[m
+[32m+[m[32m            search={search}[m
+[32m+[m[32m            setSearch={setSearch}[m
+[32m+[m[32m            filterType={filterType}[m
+[32m+[m[32m            setFilterType={setFilterType}[m
+[32m+[m[32m            filterModel={filterModel}[m
+[32m+[m[32m            setFilterModel={setFilterModel}[m
+[32m+[m[32m            filterLayanan={filterLayanan}[m
+[32m+[m[32m            setFilterLayanan={setFilterLayanan}[m
+[32m+[m[32m            filterStatus={filterStatus}[m
+[32m+[m[32m            setFilterStatus={setFilterStatus}[m
+[32m+[m[32m            modelOptionsFilter={modelOptionsFilter}[m
+[32m+[m[32m            layananOptions={layananOptions}[m
+[32m+[m[32m            filteredTxLength={filteredTx.length}[m
+[32m+[m[32m            historyStats={historyStats}[m
+[32m+[m[32m            hasActiveFilter={hasActiveFilter}[m
+[32m+[m[32m            resetFilters={resetFilters}[m
+[32m+[m[32m          />[m
+ [m
+           {/* ═══ List Transaksi (grouped by day) ═══ */}[m
+           {filteredTx.length === 0 ? ([m
+[1mdiff --git a/app/Pengeluaran/page.tsx b/app/Pengeluaran/page.tsx[m
+[1mindex e642228..2677e49 100644[m
+[1m--- a/app/Pengeluaran/page.tsx[m
+[1m+++ b/app/Pengeluaran/page.tsx[m
+[36m@@ -3,7 +3,6 @@[m
+ import { useState, useEffect, useMemo, useRef } from 'react'[m
+ import { useAppStore, useUser } from '@/lib/Store'[m
+ import Toast from '@/components/ui/Toast'[m
+[31m-import BottomNavbar from '@/components/layout/ButtomNav'[m
+ import type { Expense } from '@/lib/Data'[m
+ [m
+ // ─── Helpers ─────────────────────────────────────────────────────────────────[m
+[36m@@ -843,14 +842,14 @@[m [mexport default function PengeluaranPage() {[m
+ [m
+   if (!storeReady) {[m
+     return ([m
+[31m-      <div className="flex flex-col min-h-screen bg-surface">[m
+[31m-        <main className="flex-1 flex items-center justify-center">[m
+[31m-          <div className="text-center">[m
+[31m-            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />[m
+[31m-            <p className="text-sm text-on-surface-variant">Memuat data...</p>[m
+[31m-          </div>[m
+[31m-        </main>[m
+[31m-        <BottomNavbar />[m
+[32m+[m[32m      <div className="w-full space-y-4">[m
+[32m+[m[32m        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">[m
+[32m+[m[32m          <div className="h-32 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer" />[m
+[32m+[m[32m          <div className="h-32 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer hidden lg:block" />[m
+[32m+[m[32m          <div className="h-32 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer hidden lg:block" />[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m        <div className="h-48 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer" />[m
+[32m+[m[32m        <div className="h-64 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer" />[m
+       </div>[m
+     )[m
+   }[m
+[36m@@ -858,8 +857,7 @@[m [mexport default function PengeluaranPage() {[m
+   const periodeText = getPeriodRange(preset, selectedMonth, customFrom, customTo).label[m
+ [m
+   return ([m
+[31m-    <div className="flex flex-col min-h-screen bg-surface">[m
+[31m-      <main className="flex-1 p-4 pb-28 space-y-4 w-full max-w-3xl mx-auto">[m
+[32m+[m[32m    <div className="w-full space-y-4 lg:space-y-6">[m
+         <Toast[m
+           visible={toast.visible}[m
+           message={toast.message}[m
+[36m@@ -1185,8 +1183,6 @@[m [mexport default function PengeluaranPage() {[m
+             </ul>[m
+           )}[m
+         </div>[m
+[31m-      </main>[m
+[31m-[m
+       {/* ─── MODAL EDIT PENGELUARAN ────────────────────────────────────────── */}[m
+       {editingExp && ([m
+         <div[m
+[36m@@ -1344,7 +1340,6 @@[m [mexport default function PengeluaranPage() {[m
+         </div>[m
+       )}[m
+ [m
+[31m-      <BottomNavbar />[m
+     </div>[m
+   )[m
+ } [m
+\ No newline at end of file[m
+[1mdiff --git a/app/Transaksi/page.tsx b/app/Transaksi/page.tsx[m
+[1mindex 6ca19b6..308798b 100644[m
+[1m--- a/app/Transaksi/page.tsx[m
+[1m+++ b/app/Transaksi/page.tsx[m
+[36m@@ -256,7 +256,7 @@[m [mexport default function TransaksiPage() {[m
+   }[m
+ [m
+   return ([m
+[31m-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">[m
+[32m+[m[32m    <div className="w-full space-y-5">[m
+       <Toast[m
+         visible={toast.visible}[m
+         message={toast.message}[m
+[1mdiff --git a/app/globals.css b/app/globals.css[m
+[1mindex f76d23f..556e99d 100644[m
+[1m--- a/app/globals.css[m
+[1m+++ b/app/globals.css[m
+[36m@@ -73,6 +73,23 @@[m [mhtml {[m
+   scroll-behavior: smooth;[m
+ }[m
+ [m
+[32m+[m[32m/* Skeleton shimmer */[m
+[32m+[m[32m@keyframes shimmer {[m
+[32m+[m[32m  0% { background-position: -400px 0; }[m
+[32m+[m[32m  100% { background-position: 400px 0; }[m
+[32m+[m[32m}[m
+[32m+[m[32m.skeleton-shimmer {[m
+[32m+[m[32m  background: linear-gradient(90deg, #e7e7f3 25%, #f3f3fe 37%, #e7e7f3 63%);[m
+[32m+[m[32m  background-size: 400px 100%;[m
+[32m+[m[32m  animation: shimmer 1.4s ease infinite;[m
+[32m+[m[32m}[m
+[32m+[m[32m@media (prefers-color-scheme: dark) {[m
+[32m+[m[32m  .skeleton-shimmer {[m
+[32m+[m[32m    background: linear-gradient(90deg, #2a2d3a 25%, #343746 37%, #2a2d3a 63%);[m
+[32m+[m[32m    background-size: 400px 100%;[m
+[32m+[m[32m  }[m
+[32m+[m[32m}[m
+[32m+[m
+ @source inline("{bg-}{red,blue,green,yellow,purple,pink,indigo,cyan,emerald,rose,violet,fuchsia,amber,gray,sky,lime,teal,orange}-{400,500,600}");[m
+ [m
+ [m
+[1mdiff --git a/app/layout.tsx b/app/layout.tsx[m
+[1mindex a48ada4..868d64b 100644[m
+[1m--- a/app/layout.tsx[m
+[1m+++ b/app/layout.tsx[m
+[36m@@ -1,24 +1,48 @@[m
+ 'use client'[m
+ [m
+ import './globals.css'[m
+[31m-import { useState } from 'react'[m
+[32m+[m[32mimport { useState, useCallback, useEffect } from 'react'[m
+ import { usePathname } from 'next/navigation'[m
+[31m-import Headbar from '@/components/layout/Headbar'[m
+[32m+[m[32mimport Header from '@/components/layout/Header'[m
+ import Sidebar from '@/components/layout/Sidebar'[m
+ import BottomNav from '@/components/layout/ButtomNav'[m
+ import { StoreProvider } from '@/lib/StoreProvider'[m
+ import { AlertProvider } from '@/components/ui/Alert'[m
+[32m+[m[32mimport { AppShellSkeleton } from '@/components/ui/Skeleton'[m
+ [m
+ export default function RootLayout({ children }: { children: React.ReactNode }) {[m
+   const [drawerOpen, setDrawerOpen] = useState(false)[m
+[32m+[m[32m  const [desktopCollapsed, setDesktopCollapsed] = useState(false)[m
+   const pathname = usePathname()[m
+   const isLoginPage = pathname === '/login'[m
+[32m+[m[32m  const isHydrating = pathname == null[m
+[32m+[m
+[32m+[m[32m  // Persist collapsed state without hydration mismatch[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const v = localStorage.getItem('desktopSidebarCollapsed')[m
+[32m+[m[32m      if (v !== null) setDesktopCollapsed(v === '1')[m
+[32m+[m[32m    } catch {}[m
+[32m+[m[32m  }, [])[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      localStorage.setItem('desktopSidebarCollapsed', desktopCollapsed ? '1' : '0')[m
+[32m+[m[32m    } catch {}[m
+[32m+[m[32m  }, [desktopCollapsed])[m
+[32m+[m
+[32m+[m[32m  const handleMenuClick = useCallback(() => {[m
+[32m+[m[32m    setDrawerOpen(true)[m
+[32m+[m[32m  }, [])[m
+[32m+[m
+[32m+[m[32m  const handleToggleCollapse = useCallback(() => {[m
+[32m+[m[32m    setDesktopCollapsed((v) => !v)[m
+[32m+[m[32m  }, [])[m
+ [m
+   return ([m
+     <html lang="id">[m
+       <head>[m
+         <meta charSet="utf-8" />[m
+[31m-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />[m
+[32m+[m[32m        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />[m
+         <meta name="theme-color" content="#004ac6" />[m
+         <meta name="apple-mobile-web-app-capable" content="yes" />[m
+         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />[m
+[36m@@ -34,19 +58,25 @@[m [mexport default function RootLayout({ children }: { children: React.ReactNode })[m
+           rel="stylesheet"[m
+         />[m
+       </head>[m
+[31m-      <body className="bg-background text-on-surface min-h-screen">[m
+[32m+[m[32m      <body className="bg-background text-on-surface min-h-screen min-h-[100dvh] antialiased overflow-x-hidden">[m
+         <StoreProvider>[m
+           <AlertProvider>[m
+             {isLoginPage ? ([m
+[31m-              <main className="min-h-screen">{children}</main>[m
+[32m+[m[32m              <main className="min-h-screen min-h-[100dvh] bg-background">{children}</main>[m
+             ) : ([m
+[31m-              <div className="flex flex-col min-h-screen">[m
+[31m-                <Headbar onMenuClick={() => setDrawerOpen(true)} />[m
+[31m-                <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} />[m
+[31m-                {/* ── padding horizontal mobile DIHAPUS biar page yang atur ── */}[m
+[31m-                <main className="flex-1 pt-3 pb-20 lg:px-6 lg:pt-4 lg:pb-4">[m
+[31m-                  {children}[m
+[31m-                </main>[m
+[32m+[m[32m              <div className="min-h-screen min-h-[100dvh] bg-background overflow-x-hidden">[m
+[32m+[m[32m                <Header onMenuClick={handleMenuClick} />[m
+[32m+[m[32m                <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} collapsed={desktopCollapsed} onToggleCollapse={handleToggleCollapse} />[m
+[32m+[m
+[32m+[m[32m                {/* Content offset for fixed header+sidebar. Mobile: header 56px, no sidebar offset. Desktop: header 64px + sidebar 256/72. */}[m
+[32m+[m[32m                <div className={`pt-14 lg:pt-16 transition-[padding] duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${desktopCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[256px]'}`}>[m
+[32m+[m[32m                  <main className="min-w-0 w-full min-h-[calc(100dvh-3.5rem)] lg:min-h-[calc(100dvh-4rem)] overflow-x-hidden">[m
+[32m+[m[32m                    <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-6 xl:px-8 2xl:px-10 py-3 sm:py-4 lg:py-6 pb-24 lg:pb-8">[m
+[32m+[m[32m                      {isHydrating ? <AppShellSkeleton /> : <div className="page-fade">{children}</div>}[m
+[32m+[m[32m                    </div>[m
+[32m+[m[32m                  </main>[m
+[32m+[m[32m                </div>[m
+[32m+[m
+                 <div className="lg:hidden">[m
+                   <BottomNav />[m
+                 </div>[m
+[1mdiff --git a/app/page.tsx b/app/page.tsx[m
+[1mindex cf7d137..35df5ff 100644[m
+[1m--- a/app/page.tsx[m
+[1m+++ b/app/page.tsx[m
+[36m@@ -5,7 +5,6 @@[m [mimport { useEffect, useRef, useState, useMemo } from 'react'[m
+ import { useAppStore, useUser } from '@/lib/Store'[m
+ import Badge from '@/components/ui/Badge'[m
+ import Guard from '@/components/auth/Guard'[m
+[31m-import BottomNavbar from '@/components/layout/ButtomNav'[m
+ [m
+ // ─── Helpers ──────────────────────────────────────────────────────────────[m
+ function fmtRupiah(n: number) {[m
+[36m@@ -587,8 +586,8 @@[m [mfunction DashboardContent() {[m
+   }))[m
+ [m
+   return ([m
+[31m-    <div className="flex flex-col min-h-screen bg-surface">[m
+[31m-      <main className="flex-1 p-4 pb-24 space-y-4 w-full max-w-3xl mx-auto">[m
+[32m+[m[32m    <div className="w-full space-y-4 lg:space-y-6">[m
+[32m+[m[32m      <div className="space-y-4 lg:space-y-6 w-full">[m
+         {/* ── Header ── */}[m
+         <div className="flex items-start justify-between gap-3">[m
+           <div className="min-w-0">[m
+[36m@@ -606,7 +605,7 @@[m [mfunction DashboardContent() {[m
+         </div>[m
+ [m
+         {/* ── 3 Cards ── */}[m
+[31m-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">[m
+[32m+[m[32m        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 xl:gap-5">[m
+           {/* Pendapatan */}[m
+           <div className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/80 rounded-2xl p-4 text-white shadow-lg shadow-primary/20">[m
+             <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" />[m
+[36m@@ -701,7 +700,7 @@[m [mfunction DashboardContent() {[m
+         </div>[m
+ [m
+         {/* ── Antrian & Chart ── */}[m
+[31m-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">[m
+[32m+[m[32m        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 xl:gap-6">[m
+           {/* Antrian */}[m
+           <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">[m
+             <SectionTitle[m
+[36m@@ -837,8 +836,7 @@[m [mfunction DashboardContent() {[m
+             )}[m
+           </div>[m
+         </div>[m
+[31m-      </main>[m
+[31m-      <BottomNavbar />[m
+[32m+[m[32m      </div>[m
+     </div>[m
+   )[m
+ }[m
+[1mdiff --git a/components/layout/ButtomNav.tsx b/components/layout/ButtomNav.tsx[m
+[1mindex db3df23..cf8a9fb 100644[m
+[1m--- a/components/layout/ButtomNav.tsx[m
+[1m+++ b/components/layout/ButtomNav.tsx[m
+[36m@@ -2,32 +2,23 @@[m
+ [m
+ import Link from 'next/link'[m
+ import { usePathname } from 'next/navigation'[m
+[32m+[m[32mimport { NAV_ITEMS, isActiveRoute } from '@/lib/navigation'[m
+ [m
+[31m-const navItems = [[m
+[31m-  { href: '/', label: 'Beranda', icon: 'dashboard' },[m
+[31m-  { href: '/Kendaraan', label: 'Kendaraan', icon: 'directions_car' },[m
+[31m-  { href: '/Transaksi', label: 'Input', icon: 'add_circle' }, // di tengah[m
+[31m-  { href: '/Laporan', label: 'Laporan', icon: 'assessment' },[m
+[31m-  { href: '/Karyawan', label: 'Karyawan', icon: 'badge' },[m
+[31m-][m
+[32m+[m[32m// Bottom pill: visual preserved, items derived from shared config (order: Dashboard, Kendaraan, Input(Transaksi), Laporan, Karyawan)[m
+[32m+[m[32mconst BOTTOM_ORDER = ['/', '/Kendaraan', '/Transaksi', '/Laporan', '/Karyawan'][m
+[32m+[m[32mconst bottomItems = BOTTOM_ORDER.map((href) => NAV_ITEMS.find((n) => n.href === href)!).filter(Boolean)[m
+ [m
+ export default function BottomNav() {[m
+   const pathname = usePathname()[m
+ [m
+[31m-  const isActive = (href: string) => {[m
+[31m-    const base = href.split('?')[0][m
+[31m-    if (base === '/') return pathname === '/'[m
+[31m-    return pathname.startsWith(base)[m
+[31m-  }[m
+[31m-[m
+   return ([m
+     // Pil penuh – fixed di tengah bawah, hanya muncul di mobile (md:hidden)[m
+     <nav className="md:hidden fixed z-40 bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg h-16 bg-surface-container-lowest border border-outline-variant rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-sm">[m
+       <div className="grid h-full grid-cols-5 mx-auto">[m
+[31m-        {navItems.map((item) => {[m
+[31m-          // Tombol Input – di kolom tengah, bikin melingkar lebih besar[m
+[31m-          if (item.label === 'Input') {[m
+[31m-            const active = isActive(item.href)[m
+[32m+[m[32m        {bottomItems.map((item) => {[m
+[32m+[m[32m          const isInput = item.href === '/Transaksi'[m
+[32m+[m[32m          if (isInput) {[m
+[32m+[m[32m            const active = isActiveRoute(pathname, item.href)[m
+             return ([m
+               <div key={item.href} className="flex items-center justify-center">[m
+                 <Link[m
+[36m@@ -36,33 +27,26 @@[m [mexport default function BottomNav() {[m
+                     active ? 'scale-110 ring-4 ring-primary/20' : 'hover:scale-105 active:scale-95'[m
+                   }`}[m
+                 >[m
+[31m-                  <span className="material-symbols-outlined text-white text-[28px] icon-fill">[m
+[31m-                    {item.icon}[m
+[32m+[m[32m                  <span className="material-symbols-outlined text-white text-[28px] icon-fill" aria-hidden>[m
+[32m+[m[32m                    {item.mobileIcon || item.icon}[m
+                   </span>[m
+[31m-                  <span className="sr-only">{item.label}</span>[m
+[32m+[m[32m                  <span className="sr-only">{item.shortLabel || item.label}</span>[m
+                 </Link>[m
+               </div>[m
+             )[m
+           }[m
+ [m
+[31m-          // Tombol biasa (ikon doang, tanpa teks)[m
+[31m-          const active = isActive(item.href)[m
+[32m+[m[32m          const active = isActiveRoute(pathname, item.href)[m
+           return ([m
+             <Link[m
+               key={item.href}[m
+               href={item.href}[m
+[31m-              className={`flex items-center justify-center transition-colors ${[m
+[31m-                active ? 'text-primary' : 'text-on-surface-variant'[m
+[31m-              }`}[m
+[32m+[m[32m              className={`flex items-center justify-center transition-colors ${active ? 'text-primary' : 'text-on-surface-variant'}`}[m
+             >[m
+[31m-              <span[m
+[31m-                className={`material-symbols-outlined text-[26px] ${[m
+[31m-                  active ? 'icon-fill' : ''[m
+[31m-                }`}[m
+[31m-              >[m
+[31m-                {item.icon}[m
+[32m+[m[32m              <span className={`material-symbols-outlined text-[26px] ${active ? 'icon-fill' : ''}`} aria-hidden>[m
+[32m+[m[32m                {item.mobileIcon || item.icon}[m
+               </span>[m
+[31m-              <span className="sr-only">{item.label}</span>[m
+[32m+[m[32m              <span className="sr-only">{item.shortLabel || item.label}</span>[m
+             </Link>[m
+           )[m
+         })}[m
+[1mdiff --git a/components/layout/Headbar.tsx b/components/layout/Headbar.tsx[m
+[1mdeleted file mode 100644[m
+[1mindex 2edc830..0000000[m
+[1m--- a/components/layout/Headbar.tsx[m
+[1m+++ /dev/null[m
+[36m@@ -1,329 +0,0 @@[m
+[31m-'use client'[m
+[31m-[m
+[31m-import { useEffect, useRef, useState } from 'react'[m
+[31m-import { useAppStore, useUser } from '@/lib/Store'[m
+[31m-[m
+[31m-interface HeadbarProps {[m
+[31m-  onMenuClick: () => void[m
+[31m-}[m
+[31m-[m
+[31m-export default function Headbar({ onMenuClick }: HeadbarProps) {[m
+[31m-  const user = useUser()[m
+[31m-  const { logout } = useAppStore()[m
+[31m-  const [showDropdown, setShowDropdown] = useState(false)[m
+[31m-  const [loggingOut, setLoggingOut] = useState(false)[m
+[31m-  const dropdownRef = useRef<HTMLDivElement>(null)[m
+[31m-[m
+[31m-  // State untuk modal ganti password[m
+[31m-  const [showChangePassword, setShowChangePassword] = useState(false)[m
+[31m-  const [currentPassword, setCurrentPassword] = useState('')[m
+[31m-  const [newPassword, setNewPassword] = useState('')[m
+[31m-  const [confirmPassword, setConfirmPassword] = useState('')[m
+[31m-  const [loading, setLoading] = useState(false)[m
+[31m-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)[m
+[31m-[m
+[31m-  // Tutup dropdown kalau klik di luar[m
+[31m-  useEffect(() => {[m
+[31m-    const handleClickOutside = (e: MouseEvent) => {[m
+[31m-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {[m
+[31m-        setShowDropdown(false)[m
+[31m-      }[m
+[31m-    }[m
+[31m-    document.addEventListener('mousedown', handleClickOutside)[m
+[31m-    return () => document.removeEventListener('mousedown', handleClickOutside)[m
+[31m-  }, [])[m
+[31m-[m
+[31m-  const handleLogout = async () => {[m
+[31m-    if (loggingOut) return[m
+[31m-    setLoggingOut(true)[m
+[31m-    setShowDropdown(false)[m
+[31m-[m
+[31m-    try {[m
+[31m-      // Hapus cookie session di server (ini yang dicek middleware)[m
+[31m-      await fetch('/api/auth/logout', { method: 'POST' })[m
+[31m-    } catch {[m
+[31m-      // ignore, tetep lanjut logout di client[m
+[31m-    }[m
+[31m-[m
+[31m-    logout()[m
+[31m-    try {[m
+[31m-      localStorage.clear()[m
+[31m-      sessionStorage.clear()[m
+[31m-    } catch {[m
+[31m-      // ignore[m
+[31m-    }[m
+[31m-    window.location.href = '/login'[m
+[31m-  }[m
+[31m-[m
+[31m-  const handleChangePassword = async (e: React.FormEvent) => {[m
+[31m-    e.preventDefault()[m
+[31m-    setMessage(null)[m
+[31m-[m
+[31m-    if (!currentPassword || !newPassword || !confirmPassword) {[m
+[31m-      setMessage({ type: 'error', text: 'Semua field harus diisi' })[m
+[31m-      return[m
+[31m-    }[m
+[31m-    if (newPassword.length < 6) {[m
+[31m-      setMessage({ type: 'error', text: 'Password baru minimal 6 karakter' })[m
+[31m-      return[m
+[31m-    }[m
+[31m-    if (newPassword !== confirmPassword) {[m
+[31m-      setMessage({ type: 'error', text: 'Konfirmasi password tidak cocok' })[m
+[31m-      return[m
+[31m-    }[m
+[31m-[m
+[31m-    setLoading(true)[m
+[31m-    try {[m
+[31m-      const res = await fetch('/api/auth/change-password', {[m
+[31m-        method: 'POST',[m
+[31m-        headers: { 'Content-Type': 'application/json' },[m
+[31m-        body: JSON.stringify({[m
+[31m-          userId: user?.id,[m
+[31m-          currentPassword,[m
+[31m-          newPassword,[m
+[31m-        }),[m
+[31m-      })[m
+[31m-[m
+[31m-      const data = await res.json()[m
+[31m-      if (!res.ok) {[m
+[31m-        throw new Error(data.error || 'Gagal mengubah password')[m
+[31m-      }[m
+[31m-[m
+[31m-      setMessage({ type: 'success', text: data.message || 'Password berhasil diubah' })[m
+[31m-      setCurrentPassword('')[m
+[31m-      setNewPassword('')[m
+[31m-      setConfirmPassword('')[m
+[31m-      setTimeout(() => {[m
+[31m-        setShowChangePassword(false)[m
+[31m-        setMessage(null)[m
+[31m-      }, 2000)[m
+[31m-    } catch (err: any) {[m
+[31m-      setMessage({ type: 'error', text: err.message || 'Terjadi kesalahan' })[m
+[31m-    } finally {[m
+[31m-      setLoading(false)[m
+[31m-    }[m
+[31m-  }[m
+[31m-[m
+[31m-  const getInitials = () => {[m
+[31m-    if (!user) return '?'[m
+[31m-    if (user.name) {[m
+[31m-      const names = user.name.split(' ')[m
+[31m-      if (names.length >= 2) {[m
+[31m-        return (names[0][0] + names[1][0]).toUpperCase()[m
+[31m-      }[m
+[31m-      return user.name.slice(0, 2).toUpperCase()[m
+[31m-    }[m
+[31m-    return user.role === 'admin' ? 'AD' : 'GU'[m
+[31m-  }[m
+[31m-[m
+[31m-  const getDisplayName = () => {[m
+[31m-    if (!user) return 'User'[m
+[31m-    return user.name || (user.role === 'admin' ? 'Administrator' : 'Guest')[m
+[31m-  }[m
+[31m-[m
+[31m-  return ([m
+[31m-    <>[m
+[31m-      <header className="h-14 sticky top-0 bg-surface-container-lowest border-b border-outline-variant flex items-center z-40 px-4">[m
+[31m-        <div className="w-full flex justify-between items-center">[m
+[31m-          {/* Kiri */}[m
+[31m-          <div className="flex items-center gap-2">[m
+[31m-            <button[m
+[31m-              onClick={onMenuClick}[m
+[31m-              className="hidden lg:flex w-9 h-9 items-center justify-center rounded-full hover:bg-surface-container active:bg-surface-container-high transition-colors"[m
+[31m-            >[m
+[31m-              <span className="material-symbols-outlined text-on-surface-variant text-[22px]">menu</span>[m
+[31m-            </button>[m
+[31m-            <div className="flex items-center gap-2">[m
+[31m-              <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0">[m
+[31m-                <img src="../../favicon.ico" alt="Logo" className="w-full h-full object-contain" />[m
+[31m-              </div>[m
+[31m-              <div className="flex flex-col leading-tight">[m
+[31m-                <span className="font-black text-[16px] text-primary tracking-tight leading-none">[m
+[31m-                  Cahaya Steam[m
+[31m-                </span>[m
+[31m-                <span className="font-medium text-[10px] text-on-surface-variant tracking-wide leading-none mt-0.5">[m
+[31m-                  Car &amp; Bike Wash[m
+[31m-                </span>[m
+[31m-              </div>[m
+[31m-            </div>[m
+[31m-          </div>[m
+[31m-[m
+[31m-          {/* Kanan */}[m
+[31m-          <div className="flex items-center gap-2">[m
+[31m-            <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors relative">[m
+[31m-              <span className="material-symbols-outlined text-on-surface-variant text-[22px]">notifications</span>[m
+[31m-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border-2 border-white"></span>[m
+[31m-            </button>[m
+[31m-[m
+[31m-            <div className="relative" ref={dropdownRef}>[m
+[31m-              <button[m
+[31m-                onClick={() => setShowDropdown(v => !v)}[m
+[31m-                className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full hover:bg-surface-container active:bg-surface-container-high transition-all duration-200"[m
+[31m-              >[m
+[31m-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shadow-sm">[m
+[31m-                  {getInitials()}[m
+[31m-                </div>[m
+[31m-                <span[m
+[31m-                  className={`material-symbols-outlined text-on-surface-variant text-[20px] transition-transform duration-200 ${[m
+[31m-                    showDropdown ? 'rotate-180' : ''[m
+[31m-                  }`}[m
+[31m-                >[m
+[31m-                  expand_more[m
+[31m-                </span>[m
+[31m-              </button>[m
+[31m-[m
+[31m-              {/* Dropdown */}[m
+[31m-              <div[m
+[31m-                className={`absolute right-0 mt-2 w-56 origin-top-right transition-all duration-200 ease-out ${[m
+[31m-                  showDropdown[m
+[31m-                    ? 'opacity-100 scale-100 translate-y-0 visible'[m
+[31m-                    : 'opacity-0 scale-95 -translate-y-1 invisible'[m
+[31m-                }`}[m
+[31m-              >[m
+[31m-                <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-lg overflow-hidden">[m
+[31m-                  {/* Header profil */}[m
+[31m-                  <div className="px-4 pt-4 pb-3 flex items-center gap-3">[m
+[31m-                    <div className="w-11 h-11 rounded-full bg-primary flex items-center justify-center text-white text-base font-bold shadow-md">[m
+[31m-                      {getInitials()}[m
+[31m-                    </div>[m
+[31m-                    <div className="min-w-0">[m
+[31m-                      <p className="text-sm font-semibold text-on-surface truncate">[m
+[31m-                        {getDisplayName()}[m
+[31m-                      </p>[m
+[31m-                      <p className="text-xs text-on-surface-variant capitalize mt-0.5">[m
+[31m-                        {user?.role}[m
+[31m-                      </p>[m
+[31m-                    </div>[m
+[31m-                  </div>[m
+[31m-                  <div className="border-t border-outline-variant" />[m
+[31m-[m
+[31m-                  {/* Menu Ganti Password - HANYA UNTUK ADMIN */}[m
+[31m-                  {user?.role === 'admin' && ([m
+[31m-                    <>[m
+[31m-                      <button[m
+[31m-                        onClick={() => {[m
+[31m-                          setShowDropdown(false)[m
+[31m-                          setShowChangePassword(true)[m
+[31m-                          setMessage(null)[m
+[31m-                        }}[m
+[31m-                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-on-surface hover:bg-surface-container/50 transition-colors"[m
+[31m-                      >[m
+[31m-                        <span className="material-symbols-outlined text-[20px]">lock</span>[m
+[31m-                        Ganti Password[m
+[31m-                      </button>[m
+[31m-                      <div className="border-t border-outline-variant" />[m
+[31m-                    </>[m
+[31m-                  )}[m
+[31m-[m
+[31m-                  {/* Logout */}[m
+[31m-                  <button[m
+[31m-                    onClick={handleLogout}[m
+[31m-                    disabled={loggingOut}[m
+[31m-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-error hover:bg-error-container/20 active:bg-error-container/40 transition-colors disabled:opacity-50"[m
+[31m-                  >[m
+[31m-                    <span className="material-symbols-outlined text-[20px]">logout</span>[m
+[31m-                    {loggingOut ? 'Logging out...' : 'Logout'}[m
+[31m-                  </button>[m
+[31m-                </div>[m
+[31m-              </div>[m
+[31m-            </div>[m
+[31m-          </div>[m
+[31m-        </div>[m
+[31m-      </header>[m
+[31m-[m
+[31m-      {/* Modal Ganti Password - tetap dirender, tapi hanya bisa dipicu oleh admin */}[m
+[31m-      {showChangePassword && ([m
+[31m-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">[m
+[31m-          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 border border-outline-variant">[m
+[31m-            <h2 className="text-xl font-bold text-on-surface mb-1">Ganti Password</h2>[m
+[31m-            <p className="text-sm text-on-surface-variant mb-4">[m
+[31m-              Masukkan password lama dan password baru Anda.[m
+[31m-            </p>[m
+[31m-[m
+[31m-            <form onSubmit={handleChangePassword}>[m
+[31m-              <div className="space-y-4">[m
+[31m-                <div>[m
+[31m-                  <label className="block text-sm font-medium text-on-surface-variant mb-1">[m
+[31m-                    Password Saat Ini[m
+[31m-                  </label>[m
+[31m-                  <input[m
+[31m-                    type="password"[m
+[31m-                    value={currentPassword}[m
+[31m-                    onChange={(e) => setCurrentPassword(e.target.value)}[m
+[31m-                    className="w-full px-3 py-2 bg-surface-container rounded-lg border border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"[m
+[31m-                    required[m
+[31m-                  />[m
+[31m-                </div>[m
+[31m-                <div>[m
+[31m-                  <label className="block text-sm font-medium text-on-surface-variant mb-1">[m
+[31m-                    Password Baru[m
+[31m-                  </label>[m
+[31m-                  <input[m
+[31m-                    type="password"[m
+[31m-                    value={newPassword}[m
+[31m-                    onChange={(e) => setNewPassword(e.target.value)}[m
+[31m-                    className="w-full px-3 py-2 bg-surface-container rounded-lg border border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"[m
+[31m-                    required[m
+[31m-                    minLength={6}[m
+[31m-                  />[m
+[31m-                  <p className="text-xs text-on-surface-variant mt-1">Minimal 6 karakter</p>[m
+[31m-                </div>[m
+[31m-                <div>[m
+[31m-                  <label className="block text-sm font-medium text-on-surface-variant mb-1">[m
+[31m-                    Konfirmasi Password Baru[m
+[31m-                  </label>[m
+[31m-                  <input[m
+[31m-                    type="password"[m
+[31m-                    value={confirmPassword}[m
+[31m-                    onChange={(e) => setConfirmPassword(e.target.value)}[m
+[31m-                    className="w-full px-3 py-2 bg-surface-container rounded-lg border border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"[m
+[31m-                    required[m
+[31m-                  />[m
+[31m-                </div>[m
+[31m-[m
+[31m-                {message && ([m
+[31m-                  <div[m
+[31m-                    className={`text-sm p-2 rounded-lg ${[m
+[31m-                      message.type === 'success'[m
+[31m-                        ? 'bg-success-container text-on-success-container'[m
+[31m-                        : 'bg-error-container text-on-error-container'[m
+[31m-                    }`}[m
+[31m-                  >[m
+[31m-                    {message.text}[m
+[31m-                  </div>[m
+[31m-                )}[m
+[31m-[m
+[31m-                <div className="flex justify-end gap-2 pt-2">[m
+[31m-                  <button[m
+[31m-                    type="button"[m
+[31m-                    onClick={() => {[m
+[31m-                      setShowChangePassword(false)[m
+[31m-                      setMessage(null)[m
+[31m-                      setCurrentPassword('')[m
+[31m-                      setNewPassword('')[m
+[31m-                      setConfirmPassword('')[m
+[31m-                    }}[m
+[31m-                    className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"[m
+[31m-                    disabled={loading}[m
+[31m-                  >[m
+[31m-                    Batal[m
+[31m-                  </button>[m
+[31m-                  <button[m
+[31m-                    type="submit"[m
+[31m-                    disabled={loading}[m
+[31m-                    className="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"[m
+[31m-                  >[m
+[31m-                    {loading && ([m
+[31m-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />[m
+[31m-                    )}[m
+[31m-                    {loading ? 'Menyimpan...' : 'Simpan'}[m
+[31m-                  </button>[m
+[31m-                </div>[m
+[31m-              </div>[m
+[31m-            </form>[m
+[31m-          </div>[m
+[31m-        </div>[m
+[31m-      )}[m
+[31m-    </>[m
+[31m-  )[m
+[31m-}[m
+\ No newline at end of file[m
+[1mdiff --git a/components/layout/Header.tsx b/components/layout/Header.tsx[m
+[1mnew file mode 100644[m
+[1mindex 0000000..dea0902[m
+[1m--- /dev/null[m
+[1m+++ b/components/layout/Header.tsx[m
+[36m@@ -0,0 +1,224 @@[m
+[32m+[m[32m'use client'[m
+[32m+[m
+[32m+[m[32mimport { usePathname } from 'next/navigation'[m
+[32m+[m[32mimport { useEffect, useRef, useState } from 'react'[m
+[32m+[m[32mimport { useUser } from '@/lib/Store'[m
+[32m+[m[32mimport { useLogout } from '@/lib/useLogout'[m
+[32m+[m[32mimport { getPageMeta } from '@/lib/navigation'[m
+[32m+[m
+[32m+[m[32minterface HeaderProps {[m
+[32m+[m[32m  onMenuClick: () => void[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport default function Header({ onMenuClick }: HeaderProps) {[m
+[32m+[m[32m  const pathname = usePathname()[m
+[32m+[m[32m  const user = useUser()[m
+[32m+[m[32m  const { doLogout, loggingOut } = useLogout()[m
+[32m+[m[32m  const [showDropdown, setShowDropdown] = useState(false)[m
+[32m+[m[32m  const [showChangePassword, setShowChangePassword] = useState(false)[m
+[32m+[m[32m  const [currentPassword, setCurrentPassword] = useState('')[m
+[32m+[m[32m  const [newPassword, setNewPassword] = useState('')[m
+[32m+[m[32m  const [confirmPassword, setConfirmPassword] = useState('')[m
+[32m+[m[32m  const [loading, setLoading] = useState(false)[m
+[32m+[m[32m  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)[m
+[32m+[m[32m  const dropdownRef = useRef<HTMLDivElement>(null)[m
+[32m+[m[32m  const meta = getPageMeta(pathname)[m
+[32m+[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    const h = (e: MouseEvent) => {[m
+[32m+[m[32m      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setShowDropdown(false)[m
+[32m+[m[32m    }[m
+[32m+[m[32m    document.addEventListener('mousedown', h)[m
+[32m+[m[32m    return () => document.removeEventListener('mousedown', h)[m
+[32m+[m[32m  }, [])[m
+[32m+[m
+[32m+[m[32m  const handleChangePassword = async (e: React.FormEvent) => {[m
+[32m+[m[32m    e.preventDefault()[m
+[32m+[m[32m    setMessage(null)[m
+[32m+[m[32m    if (!currentPassword || !newPassword || !confirmPassword) {[m
+[32m+[m[32m      setMessage({ type: 'error', text: 'Semua field harus diisi' })[m
+[32m+[m[32m      return[m
+[32m+[m[32m    }[m
+[32m+[m[32m    if (newPassword.length < 6) {[m
+[32m+[m[32m      setMessage({ type: 'error', text: 'Password baru minimal 6 karakter' })[m
+[32m+[m[32m      return[m
+[32m+[m[32m    }[m
+[32m+[m[32m    if (newPassword !== confirmPassword) {[m
+[32m+[m[32m      setMessage({ type: 'error', text: 'Konfirmasi password tidak cocok' })[m
+[32m+[m[32m      return[m
+[32m+[m[32m    }[m
+[32m+[m[32m    setLoading(true)[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const res = await fetch('/api/auth/change-password', {[m
+[32m+[m[32m        method: 'POST',[m
+[32m+[m[32m        headers: { 'Content-Type': 'application/json' },[m
+[32m+[m[32m        body: JSON.stringify({ userId: user?.id, currentPassword, newPassword }),[m
+[32m+[m[32m      })[m
+[32m+[m[32m      const data = await res.json()[m
+[32m+[m[32m      if (!res.ok) throw new Error(data.error || 'Gagal mengubah password')[m
+[32m+[m[32m      setMessage({ type: 'success', text: data.message || 'Password berhasil diubah' })[m
+[32m+[m[32m      setCurrentPassword('')[m
+[32m+[m[32m      setNewPassword('')[m
+[32m+[m[32m      setConfirmPassword('')[m
+[32m+[m[32m      setTimeout(() => {[m
+[32m+[m[32m        setShowChangePassword(false)[m
+[32m+[m[32m        setMessage(null)[m
+[32m+[m[32m      }, 1800)[m
+[32m+[m[32m    } catch (err: unknown) {[m
+[32m+[m[32m      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Terjadi kesalahan' })[m
+[32m+[m[32m    } finally {[m
+[32m+[m[32m      setLoading(false)[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  const getInitials = () => {[m
+[32m+[m[32m    if (!user) return '?'[m
+[32m+[m[32m    if (user.name) {[m
+[32m+[m[32m      const p = user.name.split(' ')[m
+[32m+[m[32m      if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase()[m
+[32m+[m[32m      return user.name.slice(0, 2).toUpperCase()[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return user.role === 'admin' ? 'AD' : 'GU'[m
+[32m+[m[32m  }[m
+[32m+[m[32m  const getDisplayName = () => {[m
+[32m+[m[32m    if (!user) return 'User'[m
+[32m+[m[32m    return user.name || (user.role === 'admin' ? 'Administrator' : 'Guest')[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <>[m
+[32m+[m[32m      <header className="fixed top-0 inset-x-0 z-40 h-14 lg:h-16 flex items-center border-b border-outline-variant/30 bg-surface-container-lowest/80 backdrop-blur-xl supports-[backdrop-filter]:bg-surface-container-lowest/70">[m
+[32m+[m[32m        {/* inner container matches main content: same max-w + px so logo vs page body align, plus vertical center */}[m
+[32m+[m[32m        <div className="w-full max-w-[1600px] mx-auto px-4 lg:px-6 xl:px-8 2xl:px-10 flex items-center justify-between gap-4 min-w-0 h-full">[m
+[32m+[m[32m          {/* Left — hamburger (mobile) + brand + title/breadcrumb */}[m
+[32m+[m[32m          <div className="flex items-center gap-3 min-w-0 h-full">[m
+[32m+[m[32m            <button[m
+[32m+[m[32m              onClick={onMenuClick}[m
+[32m+[m[32m              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container active:bg-surface-container-high transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"[m
+[32m+[m[32m              aria-label="Buka menu"[m
+[32m+[m[32m            >[m
+[32m+[m[32m              <span className="material-symbols-outlined text-on-surface-variant text-[22px]" aria-hidden>menu</span>[m
+[32m+[m[32m            </button>[m
+[32m+[m[32m            {/* Brand — always visible */}[m
+[32m+[m[32m            <div className="flex items-center gap-2.5 min-w-0 h-9">[m
+[32m+[m[32m              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">[m
+[32m+[m[32m                <img src="/favicon.ico" alt="Logo" className="w-full h-full object-contain" />[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div className="flex flex-col justify-center leading-tight min-w-0 hidden min-[360px]:flex">[m
+[32m+[m[32m                <span className="font-black text-[15px] text-primary tracking-tight leading-none truncate">Cahaya Steam</span>[m
+[32m+[m[32m                <span className="font-medium text-[10px] text-on-surface-variant leading-none mt-0.5 truncate">Car &amp; Bike Wash</span>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m            {/* Desktop — title di atas, breadcrumb bawah:  Home > Kendaraan  */}[m
+[32m+[m[32m            <div className="hidden lg:flex flex-col justify-center min-w-0 h-full ml-3 pl-5 border-l border-outline-variant/30">[m
+[32m+[m[32m              <h1 className="text-[15px] font-bold text-on-surface leading-none truncate">{meta.title}</h1>[m
+[32m+[m[32m              <nav className="flex items-center gap-1 text-[11px] leading-none mt-1" aria-label="Breadcrumb">[m
+[32m+[m[32m                {meta.breadcrumb.map((b, i) => ([m
+[32m+[m[32m                  <span key={b} className="flex items-center gap-1">[m
+[32m+[m[32m                    {i > 0 && <span className="text-outline-variant mx-0.5" aria-hidden>›</span>}[m
+[32m+[m[32m                    <span className={i === meta.breadcrumb.length - 1 ? 'text-on-surface-variant font-semibold' : 'text-on-surface-variant/60'}>{b}</span>[m
+[32m+[m[32m                  </span>[m
+[32m+[m[32m                ))}[m
+[32m+[m[32m              </nav>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m          </div>[m
+[32m+[m
+[32m+[m[32m          {/* Right — notifications + avatar. Pengeluaran / desktop nav now in sidebar sections, not header. */}[m
+[32m+[m[32m          <div className="flex items-center gap-1 lg:gap-2 shrink-0">[m
+[32m+[m[32m            {/* Desktop: collapse handled by Sidebar toggle in layout; header keeps clean */}[m
+[32m+[m[32m            <button[m
+[32m+[m[32m              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors relative"[m
+[32m+[m[32m              aria-label="Notifikasi"[m
+[32m+[m[32m            >[m
+[32m+[m[32m              <span className="material-symbols-outlined text-on-surface-variant text-[22px]" aria-hidden>notifications</span>[m
+[32m+[m[32m              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border-2 border-white" aria-hidden></span>[m
+[32m+[m[32m            </button>[m
+[32m+[m
+[32m+[m[32m            <div className="relative" ref={dropdownRef}>[m
+[32m+[m[32m              <button[m
+[32m+[m[32m                onClick={() => setShowDropdown((v) => !v)}[m
+[32m+[m[32m                className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full hover:bg-surface-container active:bg-surface-container-high transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"[m
+[32m+[m[32m                aria-label="Menu profil"[m
+[32m+[m[32m                aria-expanded={showDropdown}[m
+[32m+[m[32m                aria-haspopup="menu"[m
+[32m+[m[32m              >[m
+[32m+[m[32m                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shadow-sm">{getInitials()}</div>[m
+[32m+[m[32m                <span className={`hidden sm:inline material-symbols-outlined text-on-surface-variant text-[18px] transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} aria-hidden>expand_more</span>[m
+[32m+[m[32m              </button>[m
+[32m+[m[32m              <div[m
+[32m+[m[32m                className={`absolute right-0 mt-2 w-56 origin-top-right transition-all duration-200 ease-out ${showDropdown ? 'opacity-100 scale-100 translate-y-0 visible' : 'opacity-0 scale-95 -translate-y-1 invisible'}`}[m
+[32m+[m[32m                role="menu"[m
+[32m+[m[32m              >[m
+[32m+[m[32m                <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-lg overflow-hidden">[m
+[32m+[m[32m                  <div className="px-4 pt-4 pb-3 flex items-center gap-3">[m
+[32m+[m[32m                    <div className="w-11 h-11 rounded-full bg-primary flex items-center justify-center text-white text-base font-bold shadow-md">{getInitials()}</div>[m
+[32m+[m[32m                    <div className="min-w-0">[m
+[32m+[m[32m                      <p className="text-sm font-semibold text-on-surface truncate">{getDisplayName()}</p>[m
+[32m+[m[32m                      <p className="text-xs text-on-surface-variant capitalize mt-0.5">{user?.role}</p>[m
+[32m+[m[32m                    </div>[m
+[32m+[m[32m                  </div>[m
+[32m+[m[32m                  <div className="border-t border-outline-variant" />[m
+[32m+[m[32m                  {user?.role === 'admin' && ([m
+[32m+[m[32m                    <>[m
+[32m+[m[32m                      <button[m
+[32m+[m[32m                        onClick={() => {[m
+[32m+[m[32m                          setShowDropdown(false)[m
+[32m+[m[32m                          setShowChangePassword(true)[m
+[32m+[m[32m                          setMessage(null)[m
+[32m+[m[32m                        }}[m
+[32m+[m[32m                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-on-surface hover:bg-surface-container/50 transition-colors focus-visible:outline-none focus-visible:bg-surface-container"[m
+[32m+[m[32m                        role="menuitem"[m
+[32m+[m[32m                      >[m
+[32m+[m[32m                        <span className="material-symbols-outlined text-[20px]" aria-hidden>lock</span> Ganti Password[m
+[32m+[m[32m                      </button>[m
+[32m+[m[32m                      <div className="border-t border-outline-variant" />[m
+[32m+[m[32m                    </>[m
+[32m+[m[32m                  )}[m
+[32m+[m[32m                  <button[m
+[32m+[m[32m                    onClick={doLogout}[m
+[32m+[m[32m                    disabled={loggingOut}[m
+[32m+[m[32m                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-error hover:bg-error-container/20 active:bg-error-container/40 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:bg-error-container/30"[m
+[32m+[m[32m                    role="menuitem"[m
+[32m+[m[32m                  >[m
+[32m+[m[32m                    <span className="material-symbols-outlined text-[20px]" aria-hidden>logout</span> {loggingOut ? 'Logging out...' : 'Logout'}[m
+[32m+[m[32m                  </button>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      </header>[m
+[32m+[m
+[32m+[m[32m      {showChangePassword && ([m
+[32m+[m[32m        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">[m
+[32m+[m[32m          <div className="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-md p-6 border border-outline-variant">[m
+[32m+[m[32m            <h2 className="text-xl font-bold text-on-surface mb-1">Ganti Password</h2>[m
+[32m+[m[32m            <p className="text-sm text-on-surface-variant mb-4">Masukkan password lama dan password baru Anda.</p>[m
+[32m+[m[32m            <form onSubmit={handleChangePassword}>[m
+[32m+[m[32m              <div className="space-y-4">[m
+[32m+[m[32m                <div>[m
+[32m+[m[32m                  <label className="block text-sm font-medium text-on-surface-variant mb-1">Password Saat Ini</label>[m
+[32m+[m[32m                  <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full px-3 py-2 bg-surface-container rounded-lg border border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-on-surface" required />[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                <div>[m
+[32m+[m[32m                  <label className="block text-sm font-medium text-on-surface-variant mb-1">Password Baru</label>[m
+[32m+[m[32m                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 bg-surface-container rounded-lg border border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-on-surface" required minLength={6} />[m
+[32m+[m[32m                  <p className="text-xs text-on-surface-variant mt-1">Minimal 6 karakter</p>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                <div>[m
+[32m+[m[32m                  <label className="block text-sm font-medium text-on-surface-variant mb-1">Konfirmasi Password Baru</label>[m
+[32m+[m[32m                  <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 bg-surface-container rounded-lg border border-outline-variant focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-on-surface" required />[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                {message && <div className={`text-sm p-2 rounded-lg ${message.type === 'success' ? 'bg-success-container text-on-success-container' : 'bg-error-container text-on-error-container'}`}>{message.text}</div>}[m
+[32m+[m[32m                <div className="flex justify-end gap-2 pt-2">[m
+[32m+[m[32m                  <button type="button" onClick={() => { setShowChangePassword(false); setMessage(null); setCurrentPassword(''); setNewPassword(''); setConfirmPassword('') }} className="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" disabled={loading}>Batal</button>[m
+[32m+[m[32m                  <button type="submit" disabled={loading} className="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"> {loading && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />} {loading ? 'Menyimpan...' : 'Simpan'}</button>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </form>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      )}[m
+[32m+[m[32m    </>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[1mdiff --git a/components/layout/Sidebar.tsx b/components/layout/Sidebar.tsx[m
+[1mindex 09c0a40..ba0f7d2 100644[m
+[1m--- a/components/layout/Sidebar.tsx[m
+[1m+++ b/components/layout/Sidebar.tsx[m
+[36m@@ -3,81 +3,106 @@[m
+ import Link from 'next/link'[m
+ import { usePathname } from 'next/navigation'[m
+ import { useUser } from '@/lib/Store'[m
+[32m+[m[32mimport { useLogout } from '@/lib/useLogout'[m
+[32m+[m[32mimport { getGroupedNav, isActiveRoute } from '@/lib/navigation'[m
+ [m
+ interface SidebarProps {[m
+   open: boolean[m
+   onClose: () => void[m
+[32m+[m[32m  collapsed?: boolean[m
+[32m+[m[32m  onToggleCollapse?: () => void[m
+ }[m
+ [m
+[31m-export default function Sidebar({ open, onClose }: SidebarProps) {[m
+[32m+[m[32mexport default function Sidebar({ open, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {[m
+   const pathname = usePathname()[m
+   const user = useUser()[m
+[31m-  const isRestricted = user?.role === 'guest'[m
+[32m+[m[32m  const { doLogout, loggingOut } = useLogout()[m
+[32m+[m[32m  const grouped = getGroupedNav(user?.role)[m
+ [m
+[31m-  const allNavItems = [[m
+[31m-    { href: '/', label: 'Dashboard', icon: 'dashboard' },[m
+[31m-    { href: '/Kendaraan', label: 'Kendaraan', icon: 'directions_car' },[m
+[31m-    { href: '/Transaksi', label: 'Transaksi', icon: 'receipt_long' },[m
+[31m-    { href: '/Laporan', label: 'Laporan', icon: 'assessment' },[m
+[31m-    { href: '/Karyawan', label: 'Karyawan', icon: 'people' },[m
+[31m-  ][m
+[31m-[m
+[31m-  const navItems = isRestricted[m
+[31m-    ? allNavItems.filter(item => item.href === '/' || item.href === '/Transaksi')[m
+[31m-    : allNavItems[m
+[32m+[m[32m  const getInitials = () => {[m
+[32m+[m[32m    if (!user?.name) return user?.role === 'guest' ? 'GU' : 'AD'[m
+[32m+[m[32m    const p = user.name.split(' ')[m
+[32m+[m[32m    return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : user.name.slice(0, 2).toUpperCase()[m
+[32m+[m[32m  }[m
+ [m
+   return ([m
+     <>[m
+[31m-      {/* Overlay */}[m
+       <div[m
+[31m-        className={`fixed inset-0 z-40 transition-opacity duration-300 ${[m
+[31m-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'[m
+[31m-        }`}[m
+[32m+[m[32m        className={`fixed inset-0 z-40 transition-opacity duration-300 lg:hidden ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}[m
+         style={{ background: 'rgba(0,0,0,0.5)' }}[m
+         onClick={onClose}[m
+[32m+[m[32m        aria-hidden[m
+       />[m
+[31m-      {/* Drawer */}[m
+[31m-      <div[m
+[31m-        className={`fixed top-0 left-0 h-full w-72 bg-surface-container-lowest shadow-xl z-50 transition-transform duration-300 ease-in-out ${[m
+[31m-          open ? 'translate-x-0' : '-translate-x-full'[m
+[31m-        }`}[m
+[32m+[m[32m      {/* aside: no overflow-hidden — button -right-3 won't clip. Only width animates. */}[m
+[32m+[m[32m      <aside[m
+[32m+[m[32m        className={`fixed top-0 lg:top-16 bottom-0 bg-surface-container-lowest border-r border-outline-variant/20 z-50 lg:z-30 flex flex-col lg:shrink-0[m
+[32m+[m[32m          ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}[m
+[32m+[m[32m          ${collapsed ? 'w-72 lg:w-[72px]' : 'w-72 lg:w-64'}[m
+[32m+[m[32m          lg:shadow-none shadow-xl transition-[width] duration-300 ease-in-out`}[m
+[32m+[m[32m        aria-label="Sidebar"[m
+       >[m
+[31m-        <div className="flex items-center justify-between p-4 border-b border-outline-variant">[m
+[31m-          <div className="flex items-center gap-1.5">[m
+[31m-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">[m
+[31m-              <span className="material-symbols-outlined text-white text-[15px] icon-fill">water_drop</span>[m
+[31m-            </div>[m
+[31m-            <div className="flex flex-col leading-tight">[m
+[31m-              <span className="font-black text-[16px] text-primary tracking-tight leading-none">[m
+[31m-                Cahaya Steam[m
+[31m-              </span>[m
+[31m-              <span className="font-medium text-[10px] text-on-surface-variant tracking-wide leading-none mt-0.5">[m
+[31m-                Car &amp; Bike Wash[m
+[31m-              </span>[m
+[31m-            </div>[m
+[31m-          </div>[m
+[31m-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container">[m
+[31m-            <span className="material-symbols-outlined text-on-surface-variant">close</span>[m
+[32m+[m[32m        {/* Rail handle — tengah tinggi, setengah keluar */}[m
+[32m+[m[32m        {onToggleCollapse && ([m
+[32m+[m[32m          <button[m
+[32m+[m[32m            onClick={onToggleCollapse}[m
+[32m+[m[32m            className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-6 h-6 items-center justify-center rounded-full border border-outline-variant/30 bg-surface-container-lowest shadow-sm hover:shadow hover:border-outline-variant text-on-surface-variant hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"[m
+[32m+[m[32m            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}[m
+[32m+[m[32m            title={collapsed ? 'Expand' : 'Ciutkan'}[m
+[32m+[m[32m          >[m
+[32m+[m[32m            <span className={`material-symbols-outlined text-[16px] transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} aria-hidden>[m
+[32m+[m[32m              chevron_left[m
+[32m+[m[32m            </span>[m
+[32m+[m[32m          </button>[m
+[32m+[m[32m        )}[m
+[32m+[m
+[32m+[m[32m        {/* Mobile close — desktop no header here */}[m
+[32m+[m[32m        <div className="flex lg:hidden items-center justify-end px-3 h-10 shrink-0 border-b border-outline-variant/20">[m
+[32m+[m[32m          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container shrink-0" aria-label="Tutup menu">[m
+[32m+[m[32m            <span className="material-symbols-outlined text-on-surface-variant" aria-hidden>close</span>[m
+           </button>[m
+         </div>[m
+[31m-        <nav className="flex flex-col gap-1 p-4">[m
+[31m-          {navItems.map(item => ([m
+[31m-            <Link[m
+[31m-              key={item.href}[m
+[31m-              href={item.href}[m
+[31m-              onClick={onClose}[m
+[31m-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${[m
+[31m-                pathname === item.href[m
+[31m-                  ? 'bg-primary-container text-primary'[m
+[31m-                  : 'text-on-surface-variant hover:bg-surface-container'[m
+[31m-              }`}[m
+[31m-            >[m
+[31m-              <span className="material-symbols-outlined text-[20px]">{item.icon}</span>[m
+[31m-              {item.label}[m
+[31m-            </Link>[m
+[31m-          ))}[m
+[31m-        </nav>[m
+[31m-      </div>[m
+[32m+[m
+[32m+[m[32m        {/* Scroll — overflow here, not on aside */}[m
+[32m+[m[32m        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain hide-scrollbar">[m
+[32m+[m[32m          <div className="px-3 pt-3 pb-3">[m
+[32m+[m
+[32m+[m[32m            <nav aria-label="Main" className="space-y-4">[m
+[32m+[m[32m              {Object.entries(grouped).map(([section, items]) => ([m
+[32m+[m[32m                <div key={section}>[m
+[32m+[m[32m                  {/* Label: h-4 fixed, centered. Collapsed = divider */}[m
+[32m+[m[32m                  <div className="relative h-4 mb-1 px-2 flex items-center">[m
+[32m+[m[32m                    <p className={`absolute inset-0 flex items-center text-[10px] font-bold tracking-widest uppercase text-on-surface-variant/50 whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} aria-hidden={collapsed}>[m
+[32m+[m[32m                      {section}[m
+[32m+[m[32m                    </p>[m
+[32m+[m[32m                    <span className={`absolute left-2 right-2 h-px bg-outline-variant/25 transition-opacity duration-200 ${collapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} aria-hidden />[m
+[32m+[m[32m                  </div>[m
+[32m+[m[32m                  <div className="space-y-0.5">[m
+[32m+[m[32m                    {items.map((item) => {[m
+[32m+[m[32m                      const active = isActiveRoute(pathname, item.href)[m
+[32m+[m[32m                      return ([m
+[32m+[m[32m                        <Link[m
+[32m+[m[32m                          key={item.href}[m
+[32m+[m[32m                          href={item.href}[m
+[32m+[m[32m                          onClick={onClose}[m
+[32m+[m[32m                          title={collapsed ? item.label : undefined}[m
+[32m+[m[32m                          aria-current={active ? 'page' : undefined}[m
+[32m+[m[32m                          className={`group relative flex items-center h-9 px-2 rounded-xl text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${active ? 'bg-primary text-white shadow-sm shadow-primary/20' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high'}`}[m
+[32m+[m[32m                        >[m
+[32m+[m[32m                          <span className="w-9 h-9 shrink-0 flex items-center justify-center">[m
+[32m+[m[32m                            <span className={`material-symbols-outlined text-[19px] leading-none ${active ? 'icon-fill text-white' : ''}`} aria-hidden>{item.icon}</span>[m
+[32m+[m[32m                          </span>[m
+[32m+[m[32m                          <span className={`flex-1 min-w-0 truncate whitespace-nowrap leading-none transition-opacity duration-200 ${collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>{item.label}</span>[m
+[32m+[m[32m                          {collapsed && <span className="hidden lg:group-hover:block absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 bg-on-surface text-white text-xs px-2.5 py-1 rounded-lg whitespace-nowrap pointer-events-none shadow-lg z-20">{item.label}</span>}[m
+[32m+[m[32m                        </Link>[m
+[32m+[m[32m                      )[m
+[32m+[m[32m                    })}[m
+[32m+[m[32m                  </div>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              ))}[m
+[32m+[m[32m            </nav>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      </aside>[m
+     </>[m
+   )[m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32m}[m
+[1mdiff --git a/components/ui/Skeleton.tsx b/components/ui/Skeleton.tsx[m
+[1mnew file mode 100644[m
+[1mindex 0000000..3e883ea[m
+[1m--- /dev/null[m
+[1m+++ b/components/ui/Skeleton.tsx[m
+[36m@@ -0,0 +1,142 @@[m
+[32m+[m[32m'use client'[m
+[32m+[m
+[32m+[m[32mfunction cn(...c: (string | false | null | undefined)[]) {[m
+[32m+[m[32m  return c.filter(Boolean).join(' ')[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function Skeleton({ className }: { className?: string }) {[m
+[32m+[m[32m  return <div aria-hidden className={cn('animate-pulse bg-surface-container-high rounded-lg skeleton-shimmer', className)} />[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function SkeletonText({ className }: { className?: string }) {[m
+[32m+[m[32m  return <Skeleton className={cn('h-3 w-full', className)} />[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function SkeletonCard({ className }: { className?: string }) {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className={cn('bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3', className)}>[m
+[32m+[m[32m      <div className="flex items-center gap-3">[m
+[32m+[m[32m        <Skeleton className="w-9 h-9 rounded-xl shrink-0" />[m
+[32m+[m[32m        <div className="flex-1 space-y-2 min-w-0">[m
+[32m+[m[32m          <Skeleton className="h-3 w-24" />[m
+[32m+[m[32m          <Skeleton className="h-2 w-16" />[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <Skeleton className="h-6 w-32" />[m
+[32m+[m[32m      <Skeleton className="h-2 w-full" />[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function SkeletonStats() {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">[m
+[32m+[m[32m      <div className="rounded-2xl p-4 space-y-3 bg-surface-container-lowest border border-outline-variant">[m
+[32m+[m[32m        <Skeleton className="w-9 h-9 rounded-xl" />[m
+[32m+[m[32m        <Skeleton className="h-2 w-20" />[m
+[32m+[m[32m        <Skeleton className="h-6 w-28" />[m
+[32m+[m[32m        <Skeleton className="h-2 w-16" />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <SkeletonCard />[m
+[32m+[m[32m      <SkeletonCard className="hidden sm:block" />[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function SkeletonList({ rows = 3 }: { rows?: number }) {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">[m
+[32m+[m[32m      <div className="flex items-center gap-2 mb-1">[m
+[32m+[m[32m        <Skeleton className="w-5 h-5 rounded-lg" />[m
+[32m+[m[32m        <Skeleton className="h-4 w-28" />[m
+[32m+[m[32m        <Skeleton className="h-6 w-16 ml-auto rounded-full" />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <div className="divide-y divide-outline-variant/30">[m
+[32m+[m[32m        {Array.from({ length: rows }).map((_, i) => ([m
+[32m+[m[32m          <div key={i} className="flex items-center gap-3 py-3">[m
+[32m+[m[32m            <Skeleton className="w-9 h-9 rounded-full shrink-0" />[m
+[32m+[m[32m            <div className="flex-1 min-w-0 space-y-2">[m
+[32m+[m[32m              <Skeleton className="h-3 w-3/4" />[m
+[32m+[m[32m              <Skeleton className="h-2 w-1/2" />[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m            <Skeleton className="h-6 w-16 rounded-full hidden sm:block" />[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        ))}[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function SkeletonChart() {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">[m
+[32m+[m[32m      <div className="flex items-center justify-between">[m
+[32m+[m[32m        <div className="flex items-center gap-2">[m
+[32m+[m[32m          <Skeleton className="w-5 h-5 rounded-lg" />[m
+[32m+[m[32m          <Skeleton className="h-4 w-28" />[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m        <Skeleton className="h-7 w-24 rounded-lg" />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <Skeleton className="h-5 w-32" />[m
+[32m+[m[32m      <Skeleton className="h-[190px] w-full rounded-xl" />[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function AppShellSkeleton() {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="space-y-4 w-full page-fade">[m
+[32m+[m[32m      {/* Header */}[m
+[32m+[m[32m      <div className="flex items-start justify-between gap-3">[m
+[32m+[m[32m        <div className="space-y-2">[m
+[32m+[m[32m          <Skeleton className="h-6 w-40" />[m
+[32m+[m[32m          <Skeleton className="h-3 w-32" />[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m        <Skeleton className="h-7 w-20 rounded-lg hidden sm:block" />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <SkeletonStats />[m
+[32m+[m[32m      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">[m
+[32m+[m[32m        <SkeletonList rows={3} />[m
+[32m+[m[32m        <SkeletonChart />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <SkeletonList rows={3} />[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function TableSkeleton({ rows = 5 }: { rows?: number }) {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">[m
+[32m+[m[32m      <div className="px-4 py-3 border-b border-outline-variant flex items-center gap-2">[m
+[32m+[m[32m        <Skeleton className="w-5 h-5 rounded" />[m
+[32m+[m[32m        <Skeleton className="h-4 w-32" />[m
+[32m+[m[32m        <Skeleton className="h-7 w-20 ml-auto rounded-lg" />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <div className="divide-y divide-outline-variant/20">[m
+[32m+[m[32m        {Array.from({ length: rows }).map((_, i) => ([m
+[32m+[m[32m          <div key={i} className="flex items-center gap-3 px-4 py-3">[m
+[32m+[m[32m            <Skeleton className="h-3 w-24 hidden sm:block" />[m
+[32m+[m[32m            <Skeleton className="h-3 w-20" />[m
+[32m+[m[32m            <Skeleton className="h-3 w-28 hidden md:block" />[m
+[32m+[m[32m            <Skeleton className="h-5 w-16 rounded-full ml-auto" />[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        ))}[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function FormSkeleton() {[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-4">[m
+[32m+[m[32m      <Skeleton className="h-4 w-24" />[m
+[32m+[m[32m      <Skeleton className="h-12 w-full rounded-xl" />[m
+[32m+[m[32m      <Skeleton className="h-12 w-full rounded-xl" />[m
+[32m+[m[32m      <div className="grid grid-cols-2 gap-3">[m
+[32m+[m[32m        <Skeleton className="h-11 rounded-xl" />[m
+[32m+[m[32m        <Skeleton className="h-11 rounded-xl" />[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m      <Skeleton className="h-12 w-full rounded-xl" />[m
+[32m+[m[32m    </div>[m
+[32m+[m[32m  )[m
+[32m+[m[32m}[m
+[1mdiff --git a/lib/navigation.ts b/lib/navigation.ts[m
+[1mnew file mode 100644[m
+[1mindex 0000000..0aee570[m
+[1m--- /dev/null[m
+[1m+++ b/lib/navigation.ts[m
+[36m@@ -0,0 +1,52 @@[m
+[32m+[m[32m'use client'[m
+[32m+[m
+[32m+[m[32mexport type NavItem = {[m
+[32m+[m[32m  href: string[m
+[32m+[m[32m  label: string[m
+[32m+[m[32m  shortLabel?: string[m
+[32m+[m[32m  icon: string[m
+[32m+[m[32m  mobileIcon?: string[m
+[32m+[m[32m  section: string[m
+[32m+[m[32m  roles?: ('admin' | 'guest')[][m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport const NAV_ITEMS: NavItem[] = [[m
+[32m+[m[32m  { href: '/', label: 'Dashboard', shortLabel: 'Beranda', icon: 'dashboard', section: 'Utama' },[m
+[32m+[m[32m  { href: '/Transaksi', label: 'Transaksi', shortLabel: 'Input', icon: 'receipt_long', mobileIcon: 'add_circle', section: 'Utama' },[m
+[32m+[m[32m  { href: '/Kendaraan', label: 'Kendaraan', icon: 'directions_car', section: 'Data Master', roles: ['admin'] },[m
+[32m+[m[32m  { href: '/Karyawan', label: 'Karyawan', icon: 'people', mobileIcon: 'badge', section: 'Data Master', roles: ['admin'] },[m
+[32m+[m[32m  { href: '/Laporan', label: 'Laporan', icon: 'assessment', section: 'Keuangan', roles: ['admin'] },[m
+[32m+[m[32m  { href: '/Pengeluaran', label: 'Pengeluaran', icon: 'payments', section: 'Keuangan', roles: ['admin'] },[m
+[32m+[m[32m][m
+[32m+[m
+[32m+[m[32mexport function isActiveRoute(pathname: string | null, href: string): boolean {[m
+[32m+[m[32m  if (!pathname) return false[m
+[32m+[m[32m  if (href === '/') return pathname === '/'[m
+[32m+[m[32m  return pathname === href || pathname.startsWith(href + '/')[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function getFilteredNavItems(role?: string | null): NavItem[] {[m
+[32m+[m[32m  if (role === 'guest') {[m
+[32m+[m[32m    return NAV_ITEMS.filter((item) => !item.roles || item.roles.includes('guest'))[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return NAV_ITEMS[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function getGroupedNav(role?: string | null): Record<string, NavItem[]> {[m
+[32m+[m[32m  const filtered = getFilteredNavItems(role)[m
+[32m+[m[32m  const groups: Record<string, NavItem[]> = {}[m
+[32m+[m[32m  for (const item of filtered) {[m
+[32m+[m[32m    if (!groups[item.section]) groups[item.section] = [][m
+[32m+[m[32m    groups[item.section].push(item)[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return groups[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function getPageMeta(pathname: string | null): { title: string; breadcrumb: string[] } {[m
+[32m+[m[32m  if (!pathname || pathname === '/') return { title: 'Dashboard', breadcrumb: ['Home'] }[m
+[32m+[m[32m  const item = NAV_ITEMS.find((n) => pathname === n.href || pathname.startsWith(n.href + '/'))[m
+[32m+[m[32m  if (item) return { title: item.label, breadcrumb: ['Home', item.label] }[m
+[32m+[m[32m  const seg = pathname.split('/').filter(Boolean).pop() || 'Halaman'[m
+[32m+[m[32m  const title = seg.charAt(0).toUpperCase() + seg.slice(1)[m
+[32m+[m[32m  return { title, breadcrumb: ['Home', title] }[m
+[32m+[m[32m}[m
+[1mdiff --git a/lib/useLogout.ts b/lib/useLogout.ts[m
+[1mnew file mode 100644[m
+[1mindex 0000000..c182ed9[m
+[1m--- /dev/null[m
+[1m+++ b/lib/useLogout.ts[m
+[36m@@ -0,0 +1,25 @@[m
+[32m+[m[32m'use client'[m
+[32m+[m
+[32m+[m[32mimport { useState, useCallback } from 'react'[m
+[32m+[m[32mimport { useAppStore } from './Store'[m
+[32m+[m
+[32m+[m[32mexport function useLogout() {[m
+[32m+[m[32m  const { logout } = useAppStore()[m
+[32m+[m[32m  const [loggingOut, setLoggingOut] = useState(false)[m
+[32m+[m
+[32m+[m[32m  const doLogout = useCallback(async () => {[m
+[32m+[m[32m    if (loggingOut) return[m
+[32m+[m[32m    setLoggingOut(true)[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      await fetch('/api/auth/logout', { method: 'POST' })[m
+[32m+[m[32m    } catch {}[m
+[32m+[m[32m    logout()[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      localStorage.clear()[m
+[32m+[m[32m      sessionStorage.clear()[m
+[32m+[m[32m    } catch {}[m
+[32m+[m[32m    window.location.href = '/login'[m
+[32m+[m[32m  }, [logout, loggingOut])[m
+[32m+[m
+[32m+[m[32m  return { doLogout, loggingOut }[m
+[32m+[m[32m}[m

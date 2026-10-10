@@ -60,7 +60,7 @@ function KendaraanContent() {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [vehiclesDB, search, filterType])
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     const pExp = parseRupiahInput(priceExpres)
     const pHid = parseRupiahInput(priceHidrolik)
@@ -77,19 +77,26 @@ function KendaraanContent() {
       return
     }
 
-    // ⬇️ Yang masuk ke DB: angka bersih (number)
-    addVehicle({
-      name: name.trim(),
-      tipe,
-      price_expres: pExp,
-      price_hidrolik: pHid,
-    })
-
-    setName('')
-    setTipe('mobil')
-    setPriceExpres('')
-    setPriceHidrolik('')
-    showToast('Kendaraan berhasil ditambahkan')
+    try {
+      await addVehicle({
+        name: name.trim(),
+        tipe,
+        price_expres: pExp,
+        price_hidrolik: pHid,
+      })
+      const storeError = useAppStore.getState().error
+      if (storeError) {
+        showToast(storeError, false)
+        return
+      }
+      setName('')
+      setTipe('mobil')
+      setPriceExpres('')
+      setPriceHidrolik('')
+      showToast('Kendaraan berhasil ditambahkan')
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menambahkan kendaraan', false)
+    }
   }
 
   // ── Open confirm modal ──
@@ -98,22 +105,27 @@ function KendaraanContent() {
   }
 
   // ── Konfirmasi hapus ──
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      deleteVehicle(deleteTarget.id)
+      await deleteVehicle(deleteTarget.id)
+      const storeError = useAppStore.getState().error
+      if (storeError) {
+        showToast(storeError, false)
+        return
+      }
       showToast(`"${deleteTarget.name}" dihapus`)
       setDeleteTarget(null)
-    } catch {
-      showToast('Gagal menghapus kendaraan', false)
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menghapus kendaraan', false)
     } finally {
       setDeleting(false)
     }
   }
 
   return (
-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">
+    <div className="w-full space-y-5">
       {/* Header */}
       <div>
         <h2 className="text-[22px] font-extrabold text-on-surface">Data Kendaraan</h2>

@@ -73,6 +73,23 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #e7e7f3 25%, #f3f3fe 37%, #e7e7f3 63%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+@media (prefers-color-scheme: dark) {
+  .skeleton-shimmer {
+    background: linear-gradient(90deg, #2a2d3a 25%, #343746 37%, #2a2d3a 63%);
+    background-size: 400px 100%;
+  }
+}
+
 @source inline("{bg-}{red,blue,green,yellow,purple,pink,indigo,cyan,emerald,rose,violet,fuchsia,amber,gray,sky,lime,teal,orange}-{400,500,600}");
 
 

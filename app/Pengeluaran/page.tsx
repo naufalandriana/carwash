@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAppStore, useUser } from '@/lib/Store'
 import Toast from '@/components/ui/Toast'
-import BottomNavbar from '@/components/layout/ButtomNav'
 import type { Expense } from '@/lib/Data'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -845,14 +844,14 @@ export default function PengeluaranPage() {
 
   if (!storeReady) {
     return (
-      <div className="flex flex-col min-h-screen bg-surface">
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm text-on-surface-variant">Memuat data...</p>
-          </div>
-        </main>
-        <BottomNavbar />
+      <div className="w-full space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="h-32 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer" />
+          <div className="h-32 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer hidden lg:block" />
+          <div className="h-32 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer hidden lg:block" />
+        </div>
+        <div className="h-48 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer" />
+        <div className="h-64 rounded-2xl bg-surface-container-high animate-pulse skeleton-shimmer" />
       </div>
     )
   }
@@ -860,8 +859,7 @@ export default function PengeluaranPage() {
   const periodeText = getPeriodRange(preset, selectedMonth, customFrom, customTo).label
 
   return (
-    <div className="flex flex-col min-h-screen bg-surface">
-      <main className="flex-1 p-4 pb-28 space-y-4 w-full max-w-3xl mx-auto">
+    <div className="w-full space-y-4 lg:space-y-6">
         <Toast
           visible={toast.visible}
           message={toast.message}
@@ -1154,8 +1152,6 @@ export default function PengeluaranPage() {
             </ul>
           )}
         </div>
-      </main>
-
       {/* ─── MODAL EDIT PENGELUARAN ────────────────────────────────────────── */}
       {editingExp && (
         <div
@@ -1313,7 +1309,6 @@ export default function PengeluaranPage() {
         </div>
       )}
 
-      <BottomNavbar />
     </div>
   )
 } 
