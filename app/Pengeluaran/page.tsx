@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useAppStore, useUser } from '@/lib/Store'
 import Toast from '@/components/ui/Toast'
 import type { Expense } from '@/lib/Data'
@@ -33,6 +33,21 @@ const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ]
+
+// ─── Section title ───────────────────────────────────────────────────────────
+function SectionTitle({
+  icon, label, right,
+}: { icon: string; label: string; right?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-[18px] text-primary">{icon}</span>
+        <h2 className="text-sm font-bold text-on-surface">{label}</h2>
+      </div>
+      {right}
+    </div>
+  )
+}
 
 // ─── Period filter types ───────────────────────────────────────────────────
 type PresetKey = 'today' | 'month' | 'custom' | 'all'
@@ -755,8 +770,8 @@ export default function PengeluaranPage() {
       const k = e.kategori || 'Lainnya'
       byKat[k] = (byKat[k] || 0) + e.nominal
     })
-    const topKat = Object.entries(byKat).sort((a, b) => b[1] - a[1])[0]
-    return { total, topKat }
+    const sorted = Object.entries(byKat).sort((a, b) => b[1] - a[1])
+    return { total, count: periodFiltered.length, sorted, topKat: sorted[0] }
   }, [periodFiltered])
 
   // ── Filter kategori (dari data periode aktif) ──
@@ -856,302 +871,274 @@ export default function PengeluaranPage() {
     )
   }
 
-  const periodeText = getPeriodRange(preset, selectedMonth, customFrom, customTo).label
-
   return (
     <div className="w-full space-y-4 lg:space-y-6">
-        <Toast
-          visible={toast.visible}
-          message={toast.message}
-          success={toast.success}
-          onHide={() => setToast((t) => ({ ...t, visible: false }))}
-        />
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        success={toast.success}
+        onHide={() => setToast((t) => ({ ...t, visible: false }))}
+      />
 
-        {/* ── Header ── */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[22px] font-extrabold text-on-surface">Pengeluaran</h1>
-            <p className="text-sm text-on-surface-variant font-medium mt-0.5">Catat semua pengeluaran toko</p>
-          </div>
-          {isAdmin && !showForm && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="h-10 px-4 flex-shrink-0 bg-primary text-white rounded-2xl text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-primary/20 active:scale-95 transition"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Tambah
-            </button>
-          )}
-          {!isAdmin && (
-            <span className="bg-amber-50 text-amber-700 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1 flex-shrink-0">
-              <span className="material-symbols-outlined text-[16px]">visibility</span>Guest
-            </span>
-          )}
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-extrabold text-on-surface">Pengeluaran</h1>
+          <p className="text-sm text-on-surface-variant font-medium mt-0.5">Catat semua pengeluaran toko</p>
         </div>
-
-        {/* ── Filter Periode ── */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
-            <p className="text-xs font-bold text-on-surface">
-              Periode {preset === 'month' && currentMonthLabel ? `· ${currentMonthLabel}` : ''}
-            </p>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-            {presetOptions.map((opt) => (
-              opt.value === 'month' ? (
-                <MonthPresetChip
-                  key={opt.value}
-                  active={preset === 'month'}
-                  months={availableMonths}
-                  value={selectedMonth}
-                  onSelect={setSelectedMonth}
-                  onActivate={() => setPreset('month')}
-                />
-              ) : (
-                <button
-                  key={opt.value}
-                  onClick={() => setPreset(opt.value)}
-                  className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
-                    preset === opt.value
-                      ? 'bg-primary text-white shadow-md'
-                      : 'bg-surface-container text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              )
-            ))}
-          </div>
-
-          {/* Custom range */}
-          {preset === 'custom' && (
-            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 pt-1">
-              <div>
-                <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Dari</label>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Sampai</label>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Summary cards ── */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-error-container flex items-center justify-center mb-2">
-              <span className="material-symbols-outlined text-error text-[16px] icon-fill">money_off</span>
-            </div>
-            <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Total Pengeluaran</p>
-            <p className="text-base font-extrabold text-error mt-0.5 break-words">{fmtRupiah(summary.total)}</p>
-          </div>
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-primary-container flex items-center justify-center mb-2">
-              <span className="material-symbols-outlined text-primary text-[16px] icon-fill">category</span>
-            </div>
-            <p className="text-3xl font-extrabold mt-1.5 tracking-tight">
-              {fmtRupiah(summary.total)}
-            </p>
-            <div className="flex items-center gap-3 mt-3 text-[11px] font-medium opacity-90 flex-wrap">
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px]">receipt_long</span>
-                {summary.count} item
-              </span>
-              <span className="w-1 h-1 rounded-full bg-white/60" />
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px]">category</span>
-                {summary.sorted.length} kategori
-              </span>
-              {summary.topKat && (
-                <>
-                  <span className="w-1 h-1 rounded-full bg-white/60" />
-                  <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[13px]">trending_up</span>
-                    Terbesar: {summary.topKat[0]}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Form Tambah (tepat di bawah hero card) ── */}
-        {isAdmin && showForm && (
-          <div
-            ref={addFormRef}
-            className="bg-surface-container-lowest border-2 border-primary/40 rounded-2xl p-4 shadow-lg shadow-primary/10 scroll-mt-4 animate-in fade-in slide-in-from-top-2 duration-300"
+        {isAdmin && !showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="h-10 px-4 flex-shrink-0 bg-primary text-white rounded-2xl text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-primary/20 active:scale-95 transition"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-on-surface">Tambah Pengeluaran</h2>
-              <button onClick={closeAddForm} className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center">
-                <span className="material-symbols-outlined text-[18px] text-on-surface-variant">close</span>
-              </button>
-            </div>
-            <ExpenseForm
-              categories={categories}
-              onAddCategory={handleAddCategory}
-              onRequestDeleteCategory={setDeleteKategori}
-              onRequestEditCategory={openEditKategori}
-              lastRename={lastRename}
-              onSubmit={handleAdd}
-              onCancel={closeAddForm}
-              submitting={addSubmitting}
-            />
-          </div>
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Tambah
+          </button>
         )}
+        {!isAdmin && (
+          <span className="bg-amber-50 text-amber-700 text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1 flex-shrink-0">
+            <span className="material-symbols-outlined text-[16px]">visibility</span>Guest
+          </span>
+        )}
+      </div>
 
-        {/* ── Filter & Search ── */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
-          <SectionTitle
-            icon="filter_alt"
-            label="Filter & Pencarian"
-            right={
-              <span className="text-[11px] text-on-surface-variant font-medium">
-                {filtered.length} hasil
-              </span>
-            }
-          />
-
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">
-              search
-            </span>
-            <input
-              type="text"
-              placeholder="Cari pengeluaran..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-11 pl-10 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none transition-colors"
-            />
-          </div>
-
-          {allKategori.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap">
+      {/* ── Filter Periode ── */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 space-y-2">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
+          <p className="text-xs font-bold text-on-surface">
+            Periode {preset === 'month' && currentMonthLabel ? `· ${currentMonthLabel}` : ''}
+          </p>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+          {presetOptions.map((opt) => (
+            opt.value === 'month' ? (
+              <MonthPresetChip
+                key={opt.value}
+                active={preset === 'month'}
+                months={availableMonths}
+                value={selectedMonth}
+                onSelect={setSelectedMonth}
+                onActivate={() => setPreset('month')}
+              />
+            ) : (
               <button
-                onClick={() => setFilterKat('all')}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
-                  filterKat === 'all'
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                key={opt.value}
+                onClick={() => setPreset(opt.value)}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+                  preset === opt.value
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-surface-container text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'
                 }`}
               >
-                Semua
+                {opt.label}
               </button>
-              {allKategori.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setFilterKat(filterKat === k ? 'all' : k)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                    filterKat === k ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant'
-                  }`}
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
-          )}
+            )
+          ))}
         </div>
 
-        {/* ── List ── */}
-        <div>
-          <div className="flex items-center justify-between mb-3 px-1">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary">list_alt</span>
-              <h2 className="text-sm font-bold text-on-surface">Riwayat Pengeluaran</h2>
+        {/* Custom range */}
+        {preset === 'custom' && (
+          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 pt-1">
+            <div>
+              <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Dari</label>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
+              />
             </div>
-            <span className="text-[11px] text-on-surface-variant bg-surface-container px-2 py-1 rounded-full font-semibold">
-              {filtered.length} item
+            <div>
+              <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Sampai</label>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Summary cards ── */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-error-container flex items-center justify-center mb-2">
+            <span className="material-symbols-outlined text-error text-[16px] icon-fill">money_off</span>
+          </div>
+          <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Total Pengeluaran</p>
+          <p className="text-base font-extrabold text-error mt-0.5 break-words">{fmtRupiah(summary.total)}</p>
+          <p className="text-[11px] text-on-surface-variant mt-1">
+            {summary.count} item · {summary.sorted.length} kategori
+          </p>
+        </div>
+
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-primary-container flex items-center justify-center mb-2">
+            <span className="material-symbols-outlined text-primary text-[16px] icon-fill">
+              {summary.topKat ? katIcon(summary.topKat[0]) : 'category'}
             </span>
           </div>
-
-          {loading.expenses ? (
-            <div className="flex items-center justify-center py-10">
-              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-12 bg-surface-container-lowest border border-outline-variant rounded-2xl text-on-surface-variant">
-              <span className="material-symbols-outlined text-[40px] block mb-2 opacity-40">receipt_long</span>
-              <p className="text-sm">{expenses.length === 0 ? 'Belum ada pengeluaran' : 'Tidak ditemukan di periode ini'}</p>
-            </div>
+          <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Kategori Terbesar</p>
+          {summary.topKat ? (
+            <>
+              <p className="text-base font-extrabold text-on-surface mt-0.5 truncate">{summary.topKat[0]}</p>
+              <p className="text-[11px] text-on-surface-variant mt-1">{fmtRupiah(summary.topKat[1])}</p>
+            </>
           ) : (
-            <ul className="space-y-2.5">
-              {filtered.map((exp) => (
-                <li key={exp.id} className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-on-surface break-words">{exp.nama_pengeluaran}</p>
-                        {exp.kategori && (
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${katColor(exp.kategori)}`}>
-                            {exp.kategori}
-                          </span>
-                        )}
-                      </div>
-                      {exp.keterangan && (
-                        <p className="text-xs text-on-surface-variant mt-0.5 truncate">{exp.keterangan}</p>
-                      )}
-                      <p className="text-[11px] text-outline mt-1">{fmtDate(exp.created_at)}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0 min-[400px]:flex-row min-[400px]:items-center">
-                      <span className="text-sm font-extrabold text-error">{fmtRupiah(exp.nominal)}</span>
-                      {isAdmin && (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => setEditingExp(exp)}
-                            className="w-8 h-8 rounded-xl bg-surface-container flex items-center justify-center hover:bg-primary-container hover:text-primary transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">edit</span>
-                          </button>
-                          <button
-                            onClick={() => setDeleteId(exp.id)}
-                            className="w-8 h-8 rounded-xl bg-surface-container flex items-center justify-center hover:bg-error-container hover:text-error transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
-                          </button>
-                        </div>
-                        <span className="text-base font-extrabold text-error shrink-0 whitespace-nowrap">
-                          -{fmtRupiah(exp.nominal)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {isAdmin && (
-                    <div className="border-t border-outline-variant/50 px-4 py-2 flex items-center justify-end gap-2 bg-surface-container/40">
-                      <button
-                        onClick={() => setEditingExp(exp)}
-                        className="h-8 px-3 rounded-lg bg-yellow-400/15 text-yellow-700 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">edit</span>
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(exp.id)}
-                        className="h-8 px-3 rounded-lg bg-error-container/60 text-error text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">delete</span>
-                        Hapus
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <p className="text-base font-extrabold text-on-surface-variant mt-0.5">-</p>
           )}
         </div>
+      </div>
+
+      {/* ── Form Tambah (di bawah summary) ── */}
+      {isAdmin && showForm && (
+        <div
+          ref={addFormRef}
+          className="bg-surface-container-lowest border-2 border-primary/40 rounded-2xl p-4 shadow-lg shadow-primary/10 scroll-mt-4 animate-in fade-in slide-in-from-top-2 duration-300"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold text-on-surface">Tambah Pengeluaran</h2>
+            <button onClick={closeAddForm} className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center">
+              <span className="material-symbols-outlined text-[18px] text-on-surface-variant">close</span>
+            </button>
+          </div>
+          <ExpenseForm
+            categories={categories}
+            onAddCategory={handleAddCategory}
+            onRequestDeleteCategory={setDeleteKategori}
+            onRequestEditCategory={openEditKategori}
+            lastRename={lastRename}
+            onSubmit={handleAdd}
+            onCancel={closeAddForm}
+            submitting={addSubmitting}
+          />
+        </div>
+      )}
+
+      {/* ── Filter & Search ── */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
+        <SectionTitle
+          icon="filter_alt"
+          label="Filter & Pencarian"
+          right={
+            <span className="text-[11px] text-on-surface-variant font-medium">
+              {filtered.length} hasil
+            </span>
+          }
+        />
+
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">
+            search
+          </span>
+          <input
+            type="text"
+            placeholder="Cari pengeluaran..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-11 pl-10 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none transition-colors"
+          />
+        </div>
+
+        {allKategori.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap">
+            <button
+              onClick={() => setFilterKat('all')}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
+                filterKat === 'all'
+                  ? 'bg-primary text-white'
+                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+              }`}
+            >
+              Semua
+            </button>
+            {allKategori.map((k) => (
+              <button
+                key={k}
+                onClick={() => setFilterKat(filterKat === k ? 'all' : k)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                  filterKat === k ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant'
+                }`}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── List ── */}
+      <div>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-primary">list_alt</span>
+            <h2 className="text-sm font-bold text-on-surface">Riwayat Pengeluaran</h2>
+          </div>
+          <span className="text-[11px] text-on-surface-variant bg-surface-container px-2 py-1 rounded-full font-semibold">
+            {filtered.length} item
+          </span>
+        </div>
+
+        {loading.expenses ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 bg-surface-container-lowest border border-outline-variant rounded-2xl text-on-surface-variant">
+            <span className="material-symbols-outlined text-[40px] block mb-2 opacity-40">receipt_long</span>
+            <p className="text-sm">{expenses.length === 0 ? 'Belum ada pengeluaran' : 'Tidak ditemukan di periode ini'}</p>
+          </div>
+        ) : (
+          <ul className="space-y-2.5">
+            {filtered.map((exp) => (
+              <li key={exp.id} className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">
+                <div className="p-4 flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-on-surface break-words">{exp.nama_pengeluaran}</p>
+                      {exp.kategori && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${katColor(exp.kategori)}`}>
+                          {exp.kategori}
+                        </span>
+                      )}
+                    </div>
+                    {exp.keterangan && (
+                      <p className="text-xs text-on-surface-variant mt-0.5 truncate">{exp.keterangan}</p>
+                    )}
+                    <p className="text-[11px] text-outline mt-1">{fmtDate(exp.created_at)}</p>
+                  </div>
+                  <span className="text-sm font-extrabold text-error shrink-0 whitespace-nowrap">
+                    -{fmtRupiah(exp.nominal)}
+                  </span>
+                </div>
+
+                {isAdmin && (
+                  <div className="border-t border-outline-variant/50 px-4 py-2 flex items-center justify-end gap-2 bg-surface-container/40">
+                    <button
+                      onClick={() => setEditingExp(exp)}
+                      className="h-8 px-3 rounded-lg bg-yellow-400/15 text-yellow-700 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">edit</span>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteId(exp.id)}
+                      className="h-8 px-3 rounded-lg bg-error-container/60 text-error text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">delete</span>
+                      Hapus
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* ─── MODAL EDIT PENGELUARAN ────────────────────────────────────────── */}
       {editingExp && (
         <div
@@ -1308,7 +1295,6 @@ export default function PengeluaranPage() {
           </div>
         </div>
       )}
-
     </div>
   )
-} 
+}
