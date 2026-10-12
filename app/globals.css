@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
 /* ===== SAFE AREA & FULLSCREEN SUPPORT ===== */
 html,
 body {
@@ -68,9 +70,85 @@ body {
   --font-family-sans: 'Inter', sans-serif;
 }
 
+/* ===== DARK THEME TOKENS (class-based, .dark on <html>) ===== */
+/* primary biru & merah disamain light/dark biar konsisten — hitam/putih cocok kedua mode */
+html.dark {
+  --color-primary: #004ac6;
+  --color-primary-container: #1e3a6e;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #dbe1ff;
+  --color-secondary: #b8c7dc;
+  --color-secondary-container: #2e3d52;
+  --color-on-secondary-container: #d0e1fb;
+  --color-background: #10131a;
+  --color-surface: #10131a;
+  --color-surface-container-lowest: #171a22;
+  --color-surface-container-low: #1c1f2a;
+  --color-surface-container: #23262f;
+  --color-surface-container-high: #2b2e3a;
+  --color-surface-container-highest: #343746;
+  --color-on-surface: #e1e2ed;
+  --color-on-surface-variant: #c3c6d7;
+  --color-outline: #8d91a3;
+  --color-outline-variant: #3a3d4a;
+  --color-error: #ba1a1a;
+  --color-error-container: #6d1a16;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #ffdad6;
+  --color-tertiary: #943700;
+  --color-tertiary-container: #6e2800;
+  --color-on-tertiary-container: #ffdbcd;
+  --color-success: #146b2e;
+  --color-success-container: #0a4a1e;
+  --color-on-success-container: #b7f0c8;
+}
+
 /* Smooth scroll behavior */
 html {
   scroll-behavior: smooth;
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+::selection {
+  background: #004ac6;
+  color: #ffffff;
+}
+html.dark ::selection {
+  background: #004ac6;
+  color: #ffffff;
+}
+/* native scrollbar adapts via color-scheme; subtle track for webkit */
+* {
+  scrollbar-color: #737686 transparent;
+}
+html.dark * {
+  scrollbar-color: #8d91a3 transparent;
+}
+
+/* Theme transition — only after initial paint to avoid FOUC flash */
+html.theme-transition,
+html.theme-transition body,
+html.theme-transition * {
+  transition-property: background-color, color, border-color, fill, stroke;
+  transition-duration: 160ms;
+  transition-timing-function: ease;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #e7e7f3 25%, #f3f3fe 37%, #e7e7f3 63%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+html.dark .skeleton-shimmer {
+  background: linear-gradient(90deg, #2a2d3a 25%, #343746 37%, #2a2d3a 63%);
+  background-size: 400px 100%;
 }
 
 @source inline("{bg-}{red,blue,green,yellow,purple,pink,indigo,cyan,emerald,rose,violet,fuchsia,amber,gray,sky,lime,teal,orange}-{400,500,600}");

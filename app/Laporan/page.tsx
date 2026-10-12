@@ -2,9 +2,12 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useAppStore, useUser, useVehiclesDB, useModelOptions } from '@/lib/Store'
+import { useReportTransactions } from '@/lib/queries/useReportTransactions'
+import { useExpensesQuery } from '@/lib/queries/useStaffVehiclesExpenses'
 import Toast from '@/components/ui/Toast'
 import Guard from '@/components/auth/Guard'
 import type { Transaction } from '@/lib/Data'
+import { todayWIB, wibDateFromISO } from '@/lib/date'
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 function fmtRupiah(n?: number) {
@@ -37,20 +40,23 @@ function formatTime(dateStr?: string): string {
 }
 
 function fmtDateInput(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  // WIB — pakai util agar jam 00:00-07:00 tidak salah tanggal
+  return todayWIB(d)
 }
 
 function getDayLabel(dateStr?: string): string {
   if (!dateStr) return 'Tanpa Tanggal'
+  const dWIB = wibDateFromISO(dateStr)
+  if (!dWIB) return 'Tanpa Tanggal'
+  const todayStr = todayWIB(new Date())
+  if (dWIB === todayStr) return 'Hari Ini'
+  // kemarin WIB
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (dWIB === todayWIB(yesterday)) return 'Kemarin'
   const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return 'Tanpa Tanggal'
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  const diffDays = Math.round((today - target) / 86400000)
-  if (diffDays === 0) return 'Hari Ini'
-  if (diffDays === 1) return 'Kemarin'
   return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   }).format(d)
 }
@@ -163,31 +169,67 @@ interface DropdownProps {
 }
 function Dropdown({ options, value, onChange, placeholder = 'Pilih', className = '' }: DropdownProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   const label = options.find((o) => o.value === value)?.label || placeholder
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (btnRef.current?.contains(t)) return
+      if (popRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!open) return
+    const onScroll = (e: Event) => {
+      const t = e.target as Node | null
+      if (t && popRef.current?.contains(t as Node)) return
+      const isDocScroll = t === document || (t as unknown) === window || t instanceof Document
+      if (isDocScroll) setOpen(false)
+    }
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', () => setOpen(false))
+    return () => {
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', () => setOpen(false))
+    }
+  }, [open])
+
+  const toggleOpen = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 6, left: r.left, width: r.width })
+    }
+    setOpen((p) => !p)
+  }
+
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((p) => !p)}
-        className="h-9 w-full px-3 pr-8 bg-surface-container border border-outline-variant rounded-full text-xs font-semibold flex items-center justify-between gap-1 hover:bg-surface-container-high transition-colors focus:outline-none"
+        onClick={toggleOpen}
+        className={`h-9 w-full px-3 pr-8 bg-surface-container border border-outline-variant rounded-full text-xs font-semibold flex items-center justify-between gap-1 hover:bg-surface-container-high transition-colors focus:outline-none relative ${className}`}
       >
         <span className="truncate">{label}</span>
         <span className="material-symbols-outlined text-[16px] text-on-surface-variant absolute right-2">
           {open ? 'expand_less' : 'expand_more'}
         </span>
       </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full min-w-[140px] bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg py-1 max-h-52 overflow-y-auto">
+      {open && pos && (
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 140) }}
+          className="z-[100] bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-52 overflow-y-auto overscroll-contain"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {options.map((o) => (
             <button
               key={o.value}
@@ -201,7 +243,7 @@ function Dropdown({ options, value, onChange, placeholder = 'Pilih', className =
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -234,12 +276,17 @@ function MonthPresetChip({
 
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
+    const onScroll = (e: Event) => {
+      const t = e.target as Node | null
+      if (t && popRef.current?.contains(t as Node)) return
+      const isDocScroll = t === document || (t as unknown) === window || t instanceof Document
+      if (isDocScroll) setOpen(false)
+    }
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', () => setOpen(false))
     return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', () => setOpen(false))
     }
   }, [open])
 
@@ -273,7 +320,9 @@ function MonthPresetChip({
         <div
           ref={popRef}
           style={{ position: 'fixed', top: pos.top, left: pos.left }}
-          className="z-[100] w-48 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-56 overflow-y-auto"
+          className="z-[100] w-48 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-56 overflow-y-auto overscroll-contain"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
         >
           {months.length === 0 ? (
             <p className="px-4 py-2 text-xs text-on-surface-variant">Memuat daftar bulan...</p>
@@ -328,6 +377,148 @@ function SectionTitle({ icon, label, right }: { icon: string; label: string; rig
   )
 }
 
+// ─── Compact dropdown filter cards — Laporan ─────────────────────────────────
+// Periode (laporan) + Riwayat filter — collapsed by default, expand in-card.
+
+function FilterCard(props: {
+  preset: PresetKey
+  setPreset: (p: PresetKey) => void
+  customFrom: string
+  customTo: string
+  setCustomFrom: (v: string) => void
+  setCustomTo: (v: string) => void
+  availableMonths: { value: string; label: string }[]
+  selectedMonth: string
+  setSelectedMonth: (v: string) => void
+  currentMonthLabel: string
+  reportTab: 'transaksi' | 'pengeluaran'
+  reportFilters: { type: 'all' | 'mobil' | 'motor'; model: string; layanan: string }
+  setReportFilters: React.Dispatch<React.SetStateAction<{ type: 'all' | 'mobil' | 'motor'; model: string; layanan: string }>>
+  reportModelOptions: string[]
+  reportLayananOptions: string[]
+  reportLoading: boolean
+  handleRefresh: () => void
+  reportFilteredLength: number
+  expenseFilteredLength: number
+  periodeText: string
+}) {
+  const [open, setOpen] = useState(false)
+  const { preset, setPreset, customFrom, customTo, setCustomFrom, setCustomTo, availableMonths, selectedMonth, setSelectedMonth, currentMonthLabel, reportTab, reportFilters, setReportFilters, reportModelOptions, reportLayananOptions, reportLoading, handleRefresh, reportFilteredLength, expenseFilteredLength, periodeText } = props
+  const count = reportTab === 'transaksi' ? reportFilteredLength : expenseFilteredLength
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container/50 transition-colors"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span></span>
+          <span className="min-w-0">
+            <span className="block text-xs font-bold text-on-surface leading-none">Periode &amp; Filter</span>
+            <span className="block text-[11px] text-on-surface-variant truncate">{periodeText} · {count} {reportTab === 'transaksi' ? 'transaksi' : 'item'}</span>
+          </span>
+        </span>
+        <span className="flex items-center gap-2 shrink-0">
+          <span className="hidden sm:inline text-[11px] text-primary font-semibold">{open ? 'Tutup' : 'Ubah'}</span>
+          <span className={`material-symbols-outlined text-on-surface-variant text-[20px] transition-transform ${open ? 'rotate-180' : ''}`}>expand_more</span>
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-3 border-t border-outline-variant/50 space-y-3 bg-surface-container/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Periode</span>
+            <button onClick={handleRefresh} disabled={reportLoading} className="h-7 px-2.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center gap-1 disabled:opacity-50">
+              <span className="material-symbols-outlined text-[14px]">{reportLoading ? 'hourglass_top' : 'refresh'}</span> Refresh
+            </button>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+            {presetOptions.map((opt) =>
+              opt.value === 'month' ? (
+                <MonthPresetChip key={opt.value} active={preset === 'month'} months={availableMonths} value={selectedMonth} onSelect={setSelectedMonth} onActivate={() => setPreset('month')} />
+              ) : (
+                <button key={opt.value} onClick={() => setPreset(opt.value)} className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${preset === opt.value ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}> <span className="material-symbols-outlined text-[14px]">{opt.icon}</span> {opt.label}</button>
+              )
+            )}
+          </div>
+          {preset === 'custom' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Dari</label><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-full h-9 px-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>
+              <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Sampai</label><input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="w-full h-9 px-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>
+            </div>
+          )}
+          {reportTab === 'transaksi' && (
+            <div className="grid grid-cols-3 gap-2">
+              <Dropdown options={[{ value: 'all', label: 'Semua' }, { value: 'mobil', label: 'Mobil' }, { value: 'motor', label: 'Motor' }]} value={reportFilters.type} onChange={(v) => setReportFilters((f) => ({ ...f, type: v as any, model: 'all' }))} />
+              <Dropdown options={[{ value: 'all', label: 'Model' }, ...reportModelOptions.filter((m) => m !== 'all').map((m) => ({ value: m, label: m }))]} value={reportFilters.model} onChange={(v) => setReportFilters((f) => ({ ...f, model: v }))} />
+              <Dropdown options={[{ value: 'all', label: 'Layanan' }, ...reportLayananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l }))]} value={reportFilters.layanan} onChange={(v) => setReportFilters((f) => ({ ...f, layanan: v }))} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HistoryFilterCard(props: {
+  search: string
+  setSearch: (v: string) => void
+  filterType: 'all' | 'mobil' | 'motor'
+  setFilterType: (v: 'all' | 'mobil' | 'motor') => void
+  filterModel: string
+  setFilterModel: (v: string) => void
+  filterLayanan: string
+  setFilterLayanan: (v: string) => void
+  filterStatus: 'all' | 'Menunggu' | 'Proses' | 'Selesai'
+  setFilterStatus: (v: 'all' | 'Menunggu' | 'Proses' | 'Selesai') => void
+  modelOptionsFilter: string[]
+  layananOptions: string[]
+  filteredTxLength: number
+  historyStats: { menunggu: number; proses: number; selesai: number }
+  hasActiveFilter: boolean
+  resetFilters: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const { search, setSearch, filterType, setFilterType, filterModel, setFilterModel, filterLayanan, setFilterLayanan, filterStatus, setFilterStatus, modelOptionsFilter, layananOptions, filteredTxLength, historyStats, hasActiveFilter, resetFilters } = props
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container/50 transition-colors" aria-expanded={open}>
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary text-[18px]">filter_alt</span></span>
+          <span className="min-w-0"><span className="block text-xs font-bold text-on-surface leading-none">Filter &amp; Pencarian</span><span className="block text-[11px] text-on-surface-variant truncate">{filteredTxLength} hasil{hasActiveFilter ? ' · filter aktif' : ''}</span></span>
+        </span>
+        <span className="flex items-center gap-2 shrink-0">
+          {hasActiveFilter && <span onClick={(e) => { e.stopPropagation(); resetFilters() }} className="hidden sm:inline-flex h-7 px-2.5 rounded-full bg-error-container text-error text-[11px] font-semibold items-center gap-1"><span className="material-symbols-outlined text-[14px]">close</span> Reset</span>}
+          <span className={`material-symbols-outlined text-on-surface-variant text-[20px] transition-transform ${open ? 'rotate-180' : ''}`}>expand_more</span>
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-3 border-t border-outline-variant/50 space-y-3 bg-surface-container/20">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+            <input type="text" placeholder="Cari plat, model, tipe, atau operator..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-10 pl-10 pr-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Dropdown options={[{ value: 'all', label: 'Kendaraan' }, { value: 'mobil', label: 'Mobil' }, { value: 'motor', label: 'Motor' }]} value={filterType} onChange={(v) => { setFilterType(v as any); setFilterModel('all') }} />
+            <Dropdown options={[{ value: 'all', label: 'Model' }, ...modelOptionsFilter.filter((m) => m !== 'all').map((m) => ({ value: m, label: m }))]} value={filterModel} onChange={setFilterModel} />
+            <Dropdown options={[{ value: 'all', label: 'Layanan' }, ...layananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l }))]} value={filterLayanan} onChange={setFilterLayanan} />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setFilterStatus('all')} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${filterStatus === 'all' ? 'bg-primary text-white' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}>Semua ({filteredTxLength})</button>
+            {(['Menunggu', 'Proses', 'Selesai'] as const).map((st) => {
+              const s = STATUS_STYLE[st]
+              const count = st === 'Menunggu' ? historyStats.menunggu : st === 'Proses' ? historyStats.proses : historyStats.selesai
+              const isActive = filterStatus === st
+              return <button key={st} onClick={() => setFilterStatus(isActive ? 'all' : st)} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold flex items-center gap-1.5 transition-all ${isActive ? `${s.bg} ${s.text} ring-2 ring-offset-1 ring-current` : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{st} ({count})</button>
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Status chip config ──────────────────────────────────────────────────────
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string; icon: string }> = {
   Menunggu: { bg: 'bg-error-container', text: 'text-error', dot: 'bg-error', icon: 'schedule' },
@@ -338,12 +529,14 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string; icon
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function LaporanContent() {
   const {
-    transactions, expenses, updateTransactionStatus, updateTransaction,
-    fetchReportTransactions, fetchExpenses, fetchTransactionDateRange,
+    transactions, updateTransactionStatus, updateTransaction,
+    fetchTransactionDateRange,
   } = useAppStore()
   const user = useUser()
   const vehiclesDB = useVehiclesDB()
   const isAdmin = user?.role === 'admin'
+  const expensesQ = useExpensesQuery()
+  const expenses = expensesQ.data ?? []
 
   const [toast, setToast] = useState({ visible: false, message: '', success: true })
   const showToast = (message: string, success = true) => setToast({ visible: true, message, success })
@@ -358,9 +551,7 @@ function LaporanContent() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'Menunggu' | 'Proses' | 'Selesai'>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  // Report state
-  const [reportData, setReportData] = useState<(Transaction & { id: string })[]>([])
-  const [reportLoading, setReportLoading] = useState(false)
+  // Report state — pakai TanStack Query dengan pagination penuh (1000 per page sampai habis)
   const [preset, setPreset] = useState<PresetKey>('today')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -383,6 +574,21 @@ function LaporanContent() {
   )
 
   const [reportTab, setReportTab] = useState<'transaksi' | 'pengeluaran'>('transaksi')
+
+  // Helpers plat — sama kayak app/Transaksi/page.tsx
+  function formatPlate(raw: string): string {
+    const cleaned = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+    const letters = cleaned.match(/^[A-Z]*/)?.[0] || ''
+    const numbers = cleaned.slice(letters.length).match(/^[0-9]*/)?.[0] || ''
+    const lastLetters = cleaned.slice(letters.length + numbers.length).match(/^[A-Z]*/)?.[0] || ''
+    const part1 = letters.slice(0, 2)
+    const part2 = numbers.slice(0, 4)
+    const part3 = lastLetters.slice(0, 3)
+    let result = part1
+    if (part2) result += ' ' + part2
+    if (part3) result += ' ' + part3
+    return result
+  }
 
   // Edit modal
   const [editingTx, setEditingTx] = useState<(Transaction & { id: string }) | null>(null)
@@ -424,7 +630,7 @@ function LaporanContent() {
     if (editOperators.length === 0) { showToast('Pilih minimal 1 operator!', false); return }
     try {
       await updateTransaction(editingTx.id, {
-        plat: editPlate || 'N/A',
+        plat: formatPlate(editPlate) || 'N/A',
         model: editModel,
         type: editType.trim() || undefined,
         karyawan: editOperators.join(', '),
@@ -435,7 +641,7 @@ function LaporanContent() {
       })
       showToast('Transaksi berhasil diupdate')
       setEditingTx(null)
-      if (activeTab === 'report') loadReport()
+      if (activeTab === 'report') reportQ.refetch()
     } catch {
       showToast('Gagal update transaksi', false)
     }
@@ -455,30 +661,20 @@ function LaporanContent() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Load report
-  const loadReport = async () => {
-    setReportLoading(true)
-    try {
-      let from: string | undefined
-      let to: string | undefined
-      if (preset === 'custom') {
-        from = customFrom || undefined
-        to = customTo || undefined
-      } else if (preset !== 'all') {
-        const r = getPeriodRange(preset, selectedMonth, currentMonthLabel)
-        from = r.from; to = r.to
-      }
-      const data = await fetchReportTransactions(from, to)
-      setReportData(data)
-    } catch {
-      showToast('Gagal memuat laporan', false)
-    } finally {
-      setReportLoading(false)
-    }
-  }
+  // Report range derived dari preset — untuk TanStack Query
+  const reportRange = useMemo(() => {
+    if (preset === 'custom') return { from: customFrom || undefined, to: customTo || undefined }
+    if (preset === 'all') return { from: undefined as string | undefined, to: undefined as string | undefined }
+    const r = getPeriodRange(preset, selectedMonth, currentMonthLabel)
+    return { from: r.from, to: r.to }
+  }, [preset, selectedMonth, currentMonthLabel, customFrom, customTo])
+
+  const reportQ = useReportTransactions(reportRange.from, reportRange.to)
+  const reportData = reportQ.data ?? []
+  const reportLoading = reportQ.isFetching
 
   const handleRefresh = async () => {
-    await Promise.all([loadReport(), fetchExpenses()])
+    await Promise.all([reportQ.refetch(), expensesQ.refetch()])
   }
 
   useEffect(() => {
@@ -492,16 +688,8 @@ function LaporanContent() {
         setSelectedMonth((cur) => cur || months[0]?.value || '')
       })
     }
-    if (expenses.length === 0) fetchExpenses()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
-
-  useEffect(() => {
-    if (activeTab !== 'report') return
-    if (preset === 'month' && !selectedMonth) return
-    loadReport()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, preset, selectedMonth, customFrom, customTo])
 
   // History filter options
   const allModels = useMemo(() => vehiclesDB.map((v) => ({ name: v.name, type: v.tipe })), [vehiclesDB])
@@ -915,7 +1103,7 @@ function LaporanContent() {
   const exportHandler = reportTab === 'transaksi' ? exportToExcel : exportExpensesToExcel
 
   return (
-    <div className="p-4 space-y-5 pb-24 w-full max-w-3xl mx-auto">
+    <div className="w-full space-y-5">
       <Toast {...toast} onHide={() => setToast((t) => ({ ...t, visible: false }))} />
 
       {/* ═══ Header ═══ */}
@@ -946,10 +1134,10 @@ function LaporanContent() {
       {/* ═══════════════════ TAB LAPORAN ═══════════════════ */}
       {activeTab === 'report' ? (
         <div className="space-y-4">
-          {/* Hero card */}
+          {/* Hero card — merah kalau Pengeluaran, biru kalau Transaksi */}
           <div
             className={`relative overflow-hidden rounded-2xl p-5 shadow-lg text-white ${
-              reportTab === 'pengeluaran' && netProfit < 0
+              reportTab === 'pengeluaran'
                 ? 'bg-gradient-to-br from-error via-error to-error/80 shadow-error/20'
                 : 'bg-gradient-to-br from-primary via-primary to-primary/80 shadow-primary/20'
             }`}
@@ -959,28 +1147,26 @@ function LaporanContent() {
             <div className="relative">
               <div className="flex items-center gap-2 opacity-90">
                 <span className="material-symbols-outlined text-[16px]">
-                  {reportTab === 'pengeluaran' ? 'account_balance_wallet' : 'payments'}
+                  {reportTab === 'pengeluaran' ? 'money_off' : 'payments'}
                 </span>
                 <p className="text-[11px] font-semibold uppercase tracking-wider">
-                  {reportTab === 'pengeluaran' ? 'Laba Bersih' : 'Total Pendapatan'} · {periodeText}
+                  {reportTab === 'pengeluaran' ? 'Pengeluaran' : 'Total Pendapatan'} · {periodeText}
                 </p>
               </div>
               <p className="text-3xl font-extrabold mt-1.5 tracking-tight">
-                {reportTab === 'pengeluaran'
-                  ? (netProfit >= 0 ? '' : '-') + fmtRupiah(Math.abs(netProfit))
-                  : fmtRupiah(reportStats.total)}
+                {reportTab === 'pengeluaran' ? fmtRupiah(expenseStats.total) : fmtRupiah(reportStats.total)}
               </p>
               <div className="flex items-center gap-3 mt-3 text-[11px] font-medium opacity-90">
                 {reportTab === 'pengeluaran' ? (
                   <>
                     <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[13px]">trending_up</span>
-                      {fmtRupiah(reportStats.total)} masuk
+                      <span className="material-symbols-outlined text-[13px]">receipt_long</span>
+                      {expenseStats.count} item
                     </span>
                     <span className="w-1 h-1 rounded-full bg-white/60" />
                     <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[13px]">trending_down</span>
-                      {fmtRupiah(expenseStats.total)} keluar
+                      <span className="material-symbols-outlined text-[13px]">category</span>
+                      {expenseStats.topKategori.length} kategori
                     </span>
                   </>
                 ) : (
@@ -1000,123 +1186,31 @@ function LaporanContent() {
             </div>
           </div>
 
-          {/* Periode Card */}
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
-            <SectionTitle
-              icon="calendar_month"
-              label="Periode Laporan"
-              right={
-                <button
-                  onClick={handleRefresh}
-                  disabled={reportLoading}
-                  className="h-8 px-3 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center gap-1 transition disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {reportLoading ? 'hourglass_top' : 'refresh'}
-                  </span>
-                  {reportLoading ? 'Memuat' : 'Refresh'}
-                </button>
-              }
-            />
+          {/* Periode — compact dropdown card */}
+          <FilterCard
+            preset={preset}
+            setPreset={setPreset}
+            customFrom={customFrom}
+            customTo={customTo}
+            setCustomFrom={setCustomFrom}
+            setCustomTo={setCustomTo}
+            availableMonths={availableMonths}
+            selectedMonth={selectedMonth}
+            setSelectedMonth={setSelectedMonth}
+            currentMonthLabel={currentMonthLabel}
+            reportTab={reportTab}
+            reportFilters={reportFilters}
+            setReportFilters={setReportFilters}
+            reportModelOptions={reportModelOptions}
+            reportLayananOptions={reportLayananOptions}
+            reportLoading={reportLoading}
+            handleRefresh={handleRefresh}
+            reportFilteredLength={reportFiltered.length}
+            expenseFilteredLength={expenseStats.filtered.length}
+            periodeText={periodeText}
+          />
 
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-              {presetOptions.map((opt) =>
-                opt.value === 'month' ? (
-                  <MonthPresetChip
-                    key={opt.value}
-                    active={preset === 'month'}
-                    months={availableMonths}
-                    value={selectedMonth}
-                    onSelect={setSelectedMonth}
-                    onActivate={() => setPreset('month')}
-                  />
-                ) : (
-                  <button
-                    key={opt.value}
-                    onClick={() => setPreset(opt.value)}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                      preset === opt.value
-                        ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                        : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[15px]">{opt.icon}</span>
-                    {opt.label}
-                  </button>
-                )
-              )}
-            </div>
-
-            {preset === 'custom' && (
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div>
-                  <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">
-                    Dari
-                  </label>
-                  <input
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">
-                    Sampai
-                  </label>
-                  <input
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {reportTab === 'transaksi' && (
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <Dropdown
-                  options={[
-                    { value: 'all', label: 'Semua' },
-                    { value: 'mobil', label: 'Mobil' },
-                    { value: 'motor', label: 'Motor' },
-                  ]}
-                  value={reportFilters.type}
-                  onChange={(v) => setReportFilters((f) => ({ ...f, type: v as any, model: 'all' }))}
-                />
-                <Dropdown
-                  options={[
-                    { value: 'all', label: 'Model' },
-                    ...reportModelOptions.filter((m) => m !== 'all').map((m) => ({ value: m, label: m })),
-                  ]}
-                  value={reportFilters.model}
-                  onChange={(v) => setReportFilters((f) => ({ ...f, model: v }))}
-                />
-                <Dropdown
-                  options={[
-                    { value: 'all', label: 'Layanan' },
-                    ...reportLayananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l })),
-                  ]}
-                  value={reportFilters.layanan}
-                  onChange={(v) => setReportFilters((f) => ({ ...f, layanan: v }))}
-                />
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-2 border-t border-outline-variant/50">
-              <span className="text-xs text-on-surface-variant font-medium">
-                {reportLoading
-                  ? 'Memuat data...'
-                  : reportTab === 'transaksi'
-                    ? `${reportFiltered.length} transaksi`
-                    : `${expenseStats.filtered.length} pengeluaran`}
-              </span>
-              <span className="text-[11px] text-primary font-semibold">{periodeText}</span>
-            </div>
-          </div>
-
-          {/* Sub-tab */}
+          {/* Sub-tab: Transaksi biru, Pengeluaran merah */}
           <div className="flex bg-surface-container-lowest border border-outline-variant rounded-xl p-1 gap-1">
             {(['transaksi', 'pengeluaran'] as const).map((t) => (
               <button
@@ -1124,7 +1218,9 @@ function LaporanContent() {
                 onClick={() => setReportTab(t)}
                 className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   reportTab === t
-                    ? 'bg-primary text-white shadow'
+                    ? t === 'pengeluaran'
+                      ? 'bg-error text-white shadow shadow-error/20'
+                      : 'bg-primary text-white shadow shadow-primary/20'
                     : 'text-on-surface-variant hover:bg-surface-container'
                 }`}
               >
@@ -1336,21 +1432,32 @@ function LaporanContent() {
           {/* ══ SUB-TAB: PENGELUARAN ══ */}
           {reportTab === 'pengeluaran' && (
             <div className="space-y-4">
+              {/* Cards: Laba Bersih + Kategori Terbesar — sama kayak Pengeluaran: bg-surface-container-lowest ... */}
               <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  icon="money_off"
-                  iconBg="bg-error-container"
-                  iconColor="text-error"
-                  label="Total Pengeluaran"
-                  value={fmtRupiah(expenseStats.total)}
-                />
-                <StatCard
-                  icon="receipt"
-                  iconBg="bg-surface-container"
-                  iconColor="text-on-surface-variant"
-                  label="Jumlah Item"
-                  value={`${expenseStats.count} item`}
-                />
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3.5">
+                  <div className="w-8 h-8 rounded-lg bg-success-container flex items-center justify-center mb-2.5">
+                    <span className="material-symbols-outlined text-success text-[16px] icon-fill">trending_up</span>
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Laba Bersih</p>
+                  <h3 className={`text-sm font-extrabold mt-0.5 truncate ${netProfit < 0 ? 'text-error' : 'text-on-surface'}`}>
+                    {netProfit >= 0 ? fmtRupiah(netProfit) : '-' + fmtRupiah(Math.abs(netProfit))}
+                  </h3>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 truncate">{periodeText}</p>
+                </div>
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3.5">
+                  <div className="w-8 h-8 rounded-lg bg-error-container flex items-center justify-center mb-2.5">
+                    <span className="material-symbols-outlined text-error text-[16px] icon-fill">category</span>
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Kategori Terbesar</p>
+                  {expenseStats.topKategori[0] ? (
+                    <>
+                      <h3 className="text-sm font-extrabold mt-0.5 text-on-surface truncate">{expenseStats.topKategori[0][0]}</h3>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5 truncate">{fmtRupiah(expenseStats.topKategori[0][1])}</p>
+                    </>
+                  ) : (
+                    <h3 className="text-sm font-extrabold mt-0.5 text-on-surface-variant truncate">-</h3>
+                  )}
+                </div>
               </div>
 
               {expenseStats.topKategori.length > 0 && (
@@ -1483,108 +1590,25 @@ function LaporanContent() {
             </div>
           </div>
 
-          {/* ═══ Filter Bar ═══ */}
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
-            <SectionTitle
-              icon="filter_alt"
-              label="Filter & Pencarian"
-              right={
-                hasActiveFilter ? (
-                  <button
-                    onClick={resetFilters}
-                    className="h-7 px-2.5 rounded-full bg-error-container text-error text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">close</span>
-                    Reset
-                  </button>
-                ) : (
-                  <span className="text-[11px] text-on-surface-variant font-medium">
-                    {filteredTx.length} hasil
-                  </span>
-                )
-              }
-            />
-
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">
-                search
-              </span>
-              <input
-                type="text"
-                placeholder="Cari plat, model, tipe, atau operator..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-11 pl-10 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Dropdown
-                options={[
-                  { value: 'all', label: 'Kendaraan' },
-                  { value: 'mobil', label: 'Mobil' },
-                  { value: 'motor', label: 'Motor' },
-                ]}
-                value={filterType}
-                onChange={(v) => { setFilterType(v as any); setFilterModel('all') }}
-                className="flex-1"
-              />
-              <Dropdown
-                options={[
-                  { value: 'all', label: 'Model' },
-                  ...modelOptionsFilter.filter((m) => m !== 'all').map((m) => ({ value: m, label: m })),
-                ]}
-                value={filterModel}
-                onChange={setFilterModel}
-                className="flex-1"
-              />
-              <Dropdown
-                options={[
-                  { value: 'all', label: 'Layanan' },
-                  ...layananOptions.filter((l) => l !== 'all').map((l) => ({ value: l, label: l })),
-                ]}
-                value={filterLayanan}
-                onChange={setFilterLayanan}
-                className="flex-1"
-              />
-            </div>
-
-            {/* Status chips */}
-            <div className="flex gap-1.5 flex-wrap">
-              <button
-                onClick={() => setFilterStatus('all')}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
-                  filterStatus === 'all'
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-                }`}
-              >
-                Semua ({filteredTx.length})
-              </button>
-              {(['Menunggu', 'Proses', 'Selesai'] as const).map((st) => {
-                const s = STATUS_STYLE[st]
-                const count =
-                  st === 'Menunggu' ? historyStats.menunggu
-                    : st === 'Proses' ? historyStats.proses
-                      : historyStats.selesai
-                const isActive = filterStatus === st
-                return (
-                  <button
-                    key={st}
-                    onClick={() => setFilterStatus(isActive ? 'all' : st)}
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
-                      isActive
-                        ? `${s.bg} ${s.text} ring-2 ring-offset-1 ring-current`
-                        : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                    {st} ({count})
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          {/* ═══ Filter Bar — compact dropdown card ═══ */}
+          <HistoryFilterCard
+            search={search}
+            setSearch={setSearch}
+            filterType={filterType}
+            setFilterType={setFilterType}
+            filterModel={filterModel}
+            setFilterModel={setFilterModel}
+            filterLayanan={filterLayanan}
+            setFilterLayanan={setFilterLayanan}
+            filterStatus={filterStatus}
+            setFilterStatus={setFilterStatus}
+            modelOptionsFilter={modelOptionsFilter}
+            layananOptions={layananOptions}
+            filteredTxLength={filteredTx.length}
+            historyStats={historyStats}
+            hasActiveFilter={hasActiveFilter}
+            resetFilters={resetFilters}
+          />
 
           {/* ═══ List Transaksi (grouped by day) ═══ */}
           {filteredTx.length === 0 ? (
@@ -1753,7 +1777,7 @@ function LaporanContent() {
           onClick={exportHandler}
           disabled={reportLoading || exportCount === 0}
           className={`fixed bottom-24 right-4 z-30 h-12 pl-4 pr-5 rounded-full shadow-xl flex items-center gap-2 font-semibold text-sm text-white active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none ${
-            reportTab === 'transaksi' ? 'bg-success shadow-success/30' : 'bg-error shadow-error/30'
+            reportTab === 'transaksi' ? 'bg-primary shadow-primary/30' : 'bg-error shadow-error/30'
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">download</span>
@@ -1763,8 +1787,11 @@ function LaporanContent() {
 
       {/* ═══ MODAL EDIT TRANSAKSI ═══ */}
       {editingTx && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full sm:max-w-lg bg-surface-container-lowest border border-outline-variant rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingTx(null) }}
+        >
+          <div className="w-full sm:max-w-lg bg-surface-container-lowest border border-outline-variant rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-surface-container-lowest border-b border-outline-variant px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
               <h3 className="text-lg font-bold text-on-surface">Edit Transaksi</h3>
               <button
@@ -1805,9 +1832,9 @@ function LaporanContent() {
                 <input
                   type="text"
                   placeholder="B 1234 XYZ"
-                  value={editPlate}
-                  onChange={(e) => setEditPlate(e.target.value.toUpperCase().slice(0, 10))}
-                  className="w-full h-12 px-4 bg-surface-container border-2 border-outline-variant rounded-xl text-lg font-extrabold tracking-widest uppercase focus:border-primary transition-colors"
+                  value={formatPlate(editPlate)}
+                  onChange={(e) => setEditPlate(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 9))}
+                  className="w-full h-14 px-4 bg-surface-container-lowest border-2 border-outline-variant rounded-xl text-xl font-extrabold tracking-[0.05em] uppercase focus:border-primary transition-colors"
                 />
               </div>
 

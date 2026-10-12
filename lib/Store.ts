@@ -119,6 +119,12 @@ interface AppStore {
   clearError: () => void
 }
 
+// Narrow column selections — avoid select('*')
+const TX_COLS = 'id,plat,model,type,karyawan,layanan,bayar,harga,status,tipe,created_at'
+const STAFF_COLS = 'id,nama,jabatan,initials,color,status,created_at'
+const VEHICLE_COLS = 'id,name,tipe,price_expres,price_hidrolik,created_at'
+const EXPENSE_COLS = 'id,nama_pengeluaran,kategori,nominal,keterangan,created_at'
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -179,8 +185,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         id: data.user.id,
         username: data.user.username,
       })
-    } catch (err: any) {
-      set({ error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Login gagal'
+      set({ error: msg })
       throw err
     }
   },
@@ -193,7 +200,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('transactions')
-        .select('*')
+        .select(TX_COLS)
         .order('created_at', { ascending: false })
         .limit(100)
       if (error) throw error
@@ -201,41 +208,47 @@ export const useAppStore = create<AppStore>((set, get) => ({
         transactions: (data as DBTransaction[]).map(toAppTransaction),
         loading: { ...get().loading, transactions: false },
       })
-    } catch (err: any) {
-      set((s) => ({ error: err.message, loading: { ...s.loading, transactions: false } }))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set((s) => ({ error: msg, loading: { ...s.loading, transactions: false } }))
     }
   },
 
   // ── Report: fetch SEMUA transaksi dengan rentang tanggal (no limit) ─────
+  // Pagination penuh .range() sampai habis — urut stabil created_at desc, id desc
   fetchReportTransactions: async (from, to) => {
     try {
-      let query = supabase
-        .from('transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (from) {
-        // from = 'YYYY-MM-DD' → mulai 00:00:00 WIB (+07:00)
-        query = query.gte('created_at', `${from}T00:00:00+07:00`)
+      const PAGE = 1000
+      const all: DBTransaction[] = []
+      let offset = 0
+      const gte = from ? `${from}T00:00:00+07:00` : null
+      const lte = to ? `${to}T23:59:59.999+07:00` : null
+      for (;;) {
+        let q = supabase
+          .from('transactions')
+          .select(TX_COLS)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(offset, offset + PAGE - 1)
+        if (gte) q = q.gte('created_at', gte)
+        if (lte) q = q.lte('created_at', lte)
+        const { data, error } = await q
+        if (error) throw error
+        const rows = (data ?? []) as DBTransaction[]
+        all.push(...rows)
+        if (rows.length < PAGE) break
+        offset += PAGE
+        if (offset > 200000) break
       }
-      if (to) {
-        // to = 'YYYY-MM-DD' → sampai 23:59:59.999 WIB (+07:00)
-        query = query.lte('created_at', `${to}T23:59:59.999+07:00`)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
-
-      return (data as DBTransaction[]).map(toAppTransaction)
-    } catch (err: any) {
-      set({ error: err.message })
+      return all.map(toAppTransaction)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ error: msg })
       throw err
     }
   },
 
   // ── Report: ambil rentang tanggal transaksi tertua & terbaru ────────────
-  // Dipakai untuk membangun daftar bulan yang tersedia di dropdown "Bulan Ini",
-  // supaya dropdown cuma menampilkan bulan yang benar-benar ada datanya di DB.
   fetchTransactionDateRange: async () => {
     try {
       const [oldestRes, newestRes] = await Promise.all([
@@ -250,8 +263,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (!oldest || !newest) return null
 
       return { oldest, newest }
-    } catch (err: any) {
-      set({ error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ error: msg })
       return null
     }
   },
@@ -266,7 +280,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       waktu: nowIso,
       createdAt: nowIso,
     }
-    set((s) => ({ transactions: [optimistic, ...s.transactions] }))
+    set((s) => ({ transactions: [optimistic, ...s.transactions].slice(0, 100) }))
 
     try {
       const dbStatus = mapAppStatusToDB(tx.status)
@@ -293,10 +307,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
           t.id === tempId ? toAppTransaction(data as DBTransaction) : t
         ),
       }))
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       set((s) => ({
         transactions: s.transactions.filter((t) => t.id !== tempId),
-        error: err.message,
+        error: msg,
       }))
       throw err
     }
@@ -315,8 +330,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .update({ status: dbStatus })
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ transactions: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ transactions: prev, error: msg })
+      throw err
     }
   },
 
@@ -327,7 +344,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       transactions: s.transactions.map((t) => (t.id === id ? { ...t, ...updates } : t)),
     }))
     try {
-      const dbUpdates: any = { ...updates }
+      const dbUpdates: Record<string, unknown> = { ...updates }
       if (updates.status) {
         dbUpdates.status = mapAppStatusToDB(updates.status)
       }
@@ -336,8 +353,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .update(dbUpdates)
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ transactions: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ transactions: prev, error: msg })
       throw err
     }
   },
@@ -352,8 +370,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .delete()
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ transactions: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ transactions: prev, error: msg })
+      throw err
     }
   },
 
@@ -363,7 +383,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('staff')
-        .select('*')
+        .select(STAFF_COLS)
         .eq('status', 'Aktif')
         .order('nama')
       if (error) throw error
@@ -371,8 +391,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         staff: (data as DBStaff[]).map(toAppStaff),
         loading: { ...get().loading, staff: false },
       })
-    } catch (err: any) {
-      set((s) => ({ error: err.message, loading: { ...s.loading, staff: false } }))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set((s) => ({ error: msg, loading: { ...s.loading, staff: false } }))
     }
   },
 
@@ -392,8 +413,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .single()
       if (error) throw error
       await get().fetchStaff()
-    } catch (err: any) {
-      set({ error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ error: msg })
+      throw err
     }
   },
 
@@ -409,8 +432,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .update(updates)
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ staff: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ staff: prev, error: msg })
       throw err
     }
   },
@@ -425,8 +449,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .delete()
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ staff: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ staff: prev, error: msg })
       throw err
     }
   },
@@ -437,7 +462,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('vehicles')
-        .select('*')
+        .select(VEHICLE_COLS)
         .order('tipe')
         .order('name')
       if (error) throw error
@@ -446,8 +471,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         vehiclesDB: data as DBVehicle[],
         loading: { ...get().loading, vehicles: false },
       })
-    } catch (err: any) {
-      set((s) => ({ error: err.message, loading: { ...s.loading, vehicles: false } }))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set((s) => ({ error: msg, loading: { ...s.loading, vehicles: false } }))
     }
   },
 
@@ -485,12 +511,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         vehicles: s.vehicles.map((v) => (v.id === tempId ? toAppVehicle(real) : v)),
         vehiclesDB: s.vehiclesDB.map((v) => (v.id === tempId ? real : v)),
       }))
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       set((s) => ({
         vehicles: s.vehicles.filter((v) => v.id !== tempId),
         vehiclesDB: s.vehiclesDB.filter((v) => v.id !== tempId),
-        error: err.message,
+        error: msg,
       }))
+      throw err
     }
   },
 
@@ -508,12 +536,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .delete()
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       set({
         vehicles: prevVehicles,
         vehiclesDB: prevVehiclesDB,
-        error: err.message,
+        error: msg,
       })
+      throw err
     }
   },
 
@@ -527,15 +557,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('expenses')
-        .select('*')
+        .select(EXPENSE_COLS)
         .order('created_at', { ascending: false })
       if (error) throw error
       set({
         expenses: data as Expense[],
         loading: { ...get().loading, expenses: false },
       })
-    } catch (err: any) {
-      set((s) => ({ error: err.message, loading: { ...s.loading, expenses: false } }))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set((s) => ({ error: msg, loading: { ...s.loading, expenses: false } }))
     }
   },
 
@@ -566,10 +597,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set((s) => ({
         expenses: s.expenses.map((e) => (e.id === tempId ? inserted : e)),
       }))
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       set((s) => ({
         expenses: s.expenses.filter((e) => e.id !== tempId),
-        error: err.message,
+        error: msg,
       }))
       throw err
     }
@@ -592,8 +624,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         })
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ expenses: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ expenses: prev, error: msg })
       throw err
     }
   },
@@ -608,8 +641,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         .delete()
         .eq('id', id)
       if (error) throw error
-    } catch (err: any) {
-      set({ expenses: prev, error: err.message })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ expenses: prev, error: msg })
       throw err
     }
   },
@@ -637,10 +671,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ initialized: true })
     } catch (err) {
       console.error('Init store error:', err)
+      // tetap tandai initialized agar UI tidak ngestuck; error sudah di set di masing2 fetch
+      set({ initialized: true })
     }
   },
 
-  // ── Realtime Subscription ─────────────────────────────────────────────────
+  // ── Realtime Subscription (legacy) — kept for backward compat ────────────
+  // Aplikasi kini memakai lib/realtime.tsx (debounced invalidate) sebagai sumber
+  // utama. Channel ini tetap ada untuk halaman yang masih mengandalkan Store langsung.
   subscribeRealtime: () => {
     const channel = supabase
       .channel('otowash-realtime')
@@ -653,7 +691,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
           set((s) => {
             const exists = s.transactions.some((t) => t.id === newTx.id)
             if (exists) return s
-            return { transactions: [newTx, ...s.transactions] }
+            // cap agar tidak tumbuh tanpa batas
+            const dedupTemp = s.transactions.filter((t) => !t.id.startsWith('temp-') || t.plat !== newTx.plat)
+            return { transactions: [newTx, ...dedupTemp].slice(0, 100) }
           })
         }
       )
@@ -685,7 +725,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
           set((s) => {
             const exists = s.expenses.some((e) => e.id === newExp.id)
             if (exists) return s
-            return { expenses: [newExp, ...s.expenses] }
+            // dedupe optimistic tempId vs realtime
+            const withoutTemp = s.expenses.filter((e) => !e.id.startsWith('temp-') || e.nama_pengeluaran !== newExp.nama_pengeluaran)
+            return { expenses: [newExp, ...withoutTemp] }
           })
         }
       )

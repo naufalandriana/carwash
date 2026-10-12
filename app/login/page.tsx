@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAppStore } from '@/lib/Store'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 export default function LoginPage() {
   const { authenticateAdmin, error, clearError } = useAppStore()
@@ -66,7 +67,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-lg">
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center mx-auto mb-3">
