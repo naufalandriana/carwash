@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NAV_ITEMS, isActiveRoute } from '@/lib/navigation'
+import { useQueryClient } from '@tanstack/react-query'
+import { qk } from '@/lib/queries/keys'
 
 // Bottom pill: visual preserved, items derived from shared config (order: Dashboard, Kendaraan, Input(Transaksi), Laporan, Karyawan)
 const BOTTOM_ORDER = ['/', '/Kendaraan', '/Transaksi', '/Laporan', '/Karyawan']
@@ -10,6 +12,14 @@ const bottomItems = BOTTOM_ORDER.map((href) => NAV_ITEMS.find((n) => n.href === 
 
 export default function BottomNav() {
   const pathname = usePathname()
+  const qc = useQueryClient()
+  const prefetch = (href: string) => {
+    if (href === '/Laporan') qc.prefetchQuery({ queryKey: qk.reportTransactions(undefined, undefined) })
+    if (href === '/') {
+      qc.prefetchQuery({ queryKey: qk.dashboardSummary() })
+      qc.prefetchQuery({ queryKey: qk.queue() })
+    }
+  }
 
   return (
     // Pil penuh – fixed di tengah bawah, hanya muncul di mobile (md:hidden)
@@ -23,6 +33,8 @@ export default function BottomNav() {
               <div key={item.href} className="flex items-center justify-center">
                 <Link
                   href={item.href}
+                  onMouseEnter={() => prefetch(item.href)}
+                  onTouchStart={() => prefetch(item.href)}
                   className={`w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/30 transition-all ${
                     active ? 'scale-110 ring-4 ring-primary/20' : 'hover:scale-105 active:scale-95'
                   }`}
@@ -41,6 +53,8 @@ export default function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              onMouseEnter={() => prefetch(item.href)}
+              onTouchStart={() => prefetch(item.href)}
               className={`flex items-center justify-center transition-colors ${active ? 'text-primary' : 'text-on-surface-variant'}`}
             >
               <span className={`material-symbols-outlined text-[26px] ${active ? 'icon-fill' : ''}`} aria-hidden>

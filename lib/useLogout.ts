@@ -15,8 +15,11 @@ export function useLogout() {
     } catch {}
     logout()
     try {
+      // Hapus semua cache termasuk TanStack Query persist
       localStorage.clear()
       sessionStorage.clear()
+      // ensure query cache key removed even if clear missed
+      localStorage.removeItem('otowash-query-cache')
     } catch {}
     window.location.href = '/login'
   }, [logout, loggingOut])

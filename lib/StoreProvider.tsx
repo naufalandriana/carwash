@@ -11,12 +11,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (didInit.current) return
     didInit.current = true
-
     initStore()
-    const unsubscribe = subscribeRealtime()
-    return () => unsubscribe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    const unsub = subscribeRealtime()
+    return () => unsub()
+  }, [initStore, subscribeRealtime])
 
   return <>{children}</>
 }

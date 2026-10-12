@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { useAppStore, useVehiclesDB, useUser } from '@/lib/Store'
 import Guard from '@/components/auth/Guard'
-import { useAlert } from '@/components/ui/Alert'
+import Toast from '@/components/ui/Toast'
 
 // ── Format input harga: "30000" → "30.000" ──
 function formatRupiahInput(value: string): string {
@@ -29,7 +29,6 @@ function KendaraanContent() {
   const vehiclesDB = useVehiclesDB()
   const user = useUser()
   const isAdmin = user?.role === 'admin'
-  const { showAlert } = useAlert()
 
   const [name, setName] = useState('')
   const [tipe, setTipe] = useState<'mobil' | 'motor'>('mobil')
@@ -42,13 +41,10 @@ function KendaraanContent() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // ── Toast (sama seperti halaman lain) ──
+  const [toast, setToast] = useState({ visible: false, message: '', success: true })
   const showToast = (message: string, success = true) =>
-    showAlert({
-      variant: success ? 'success' : 'error',
-      message,
-      duration: 3000,
-      position: 'top-center',
-    })
+    setToast({ visible: true, message, success })
 
   const filteredVehicles = useMemo(() => {
     return vehiclesDB
@@ -126,6 +122,13 @@ function KendaraanContent() {
 
   return (
     <div className="w-full space-y-5">
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        success={toast.success}
+        onHide={() => setToast((t) => ({ ...t, visible: false }))}
+      />
+
       {/* Header */}
       <div>
         <h2 className="text-[22px] font-extrabold text-on-surface">Data Kendaraan</h2>
@@ -310,7 +313,7 @@ function KendaraanContent() {
         </div>
       )}
 
-      {/* ═══ MODAL KONFIRMASI HAPUS (style Alert danger) ═══ */}
+      {/* ═══ MODAL KONFIRMASI HAPUS ═══ */}
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"

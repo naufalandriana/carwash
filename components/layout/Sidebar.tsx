@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUser } from '@/lib/Store'
-import { useLogout } from '@/lib/useLogout'
 import { getGroupedNav, isActiveRoute } from '@/lib/navigation'
+import ThemeToggle from '@/components/ui/ThemeToggle'
+import { useQueryClient } from '@tanstack/react-query'
+import { qk } from '@/lib/queries/keys'
 
 interface SidebarProps {
   open: boolean
@@ -16,13 +18,15 @@ interface SidebarProps {
 export default function Sidebar({ open, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname()
   const user = useUser()
-  const { doLogout, loggingOut } = useLogout()
   const grouped = getGroupedNav(user?.role)
-
-  const getInitials = () => {
-    if (!user?.name) return user?.role === 'guest' ? 'GU' : 'AD'
-    const p = user.name.split(' ')
-    return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : user.name.slice(0, 2).toUpperCase()
+  const qc = useQueryClient()
+  const prefetch = (href: string) => {
+    if (href === '/Laporan') qc.prefetchQuery({ queryKey: qk.reportTransactions(undefined, undefined) })
+    if (href === '/Pengeluaran') qc.prefetchQuery({ queryKey: qk.expenses() })
+    if (href === '/') {
+      qc.prefetchQuery({ queryKey: qk.dashboardSummary() })
+      qc.prefetchQuery({ queryKey: qk.queue() })
+    }
   }
 
   return (
@@ -84,6 +88,8 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                           key={item.href}
                           href={item.href}
                           onClick={onClose}
+                          onMouseEnter={() => prefetch(item.href)}
+                          onTouchStart={() => prefetch(item.href)}
                           title={collapsed ? item.label : undefined}
                           aria-current={active ? 'page' : undefined}
                           className={`group relative flex items-center h-9 px-2 rounded-xl text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${active ? 'bg-primary text-white shadow-sm shadow-primary/20' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high'}`}
@@ -100,6 +106,13 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                 </div>
               ))}
             </nav>
+          </div>
+        </div>
+        {/* Theme toggle — works on mobile drawer + desktop */}
+        <div className="shrink-0 border-t border-outline-variant/20 px-3 py-3">
+          <div className={`flex items-center gap-2 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+            <span className={`text-xs font-semibold text-on-surface-variant whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'hidden' : 'block'}`}>Tema</span>
+            <ThemeToggle />
           </div>
         </div>
       </aside>

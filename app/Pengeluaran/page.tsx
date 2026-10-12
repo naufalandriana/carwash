@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useAppStore, useUser } from '@/lib/Store'
+import { useExpensesQuery } from '@/lib/queries/useStaffVehiclesExpenses'
 import Toast from '@/components/ui/Toast'
 import type { Expense } from '@/lib/Data'
+import { todayWIB, wibDateFromISO, monthKeyWIB } from '@/lib/date'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtRupiah(n: number) {
@@ -26,7 +28,7 @@ function fmtDate(dateStr: string) {
 }
 
 function fmtDateInput(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return todayWIB(d)
 }
 
 const MONTH_NAMES = [
@@ -66,12 +68,12 @@ function monthRangeFromValue(value: string): { from: string; to: string } {
   return { from: fmtDateInput(start), to: fmtDateInput(end) }
 }
 
-// Ambil daftar bulan yang benar-benar ada datanya dari list expenses (client-side)
+// Ambil daftar bulan yang benar-benar ada datanya dari list expenses (client-side) — WIB
 function getAvailableMonths(expenses: Expense[]): { value: string; label: string }[] {
   const set = new Set<string>()
   expenses.forEach((e) => {
-    const d = new Date(e.created_at)
-    set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    const k = monthKeyWIB(e.created_at)
+    if (k) set.add(k)
   })
   return Array.from(set)
     .sort((a, b) => (a < b ? 1 : -1)) // terbaru dulu
@@ -558,11 +560,12 @@ function katColor(kat?: string | null) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PengeluaranPage() {
-  const { expenses, fetchExpenses, addExpense, deleteExpense, updateExpense, loading, initialized, initStore } = useAppStore()
+  const expensesQ = useExpensesQuery()
+  const expenses = expensesQ.data ?? []
+  const { addExpense, deleteExpense, updateExpense } = useAppStore()
   const user = useUser()
   const isAdmin = user?.role === 'admin'
 
-  const [storeReady, setStoreReady] = useState(false)
   const [toast, setToast] = useState({ visible: false, message: '', success: true })
   const showToast = (message: string, success = true) => setToast({ visible: true, message, success })
 
@@ -649,8 +652,8 @@ export default function PengeluaranPage() {
       if (filterKat === deleteKategori) setFilterKat('all')
       showToast(`Kategori "${deleteKategori}" dihapus`)
       setDeleteKategori(null)
-    } catch (err: any) {
-      showToast(err.message || 'Gagal menghapus kategori', false)
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Gagal menghapus kategori', false)
     } finally {
       setDeleteKategoriSubmitting(false)
     }
@@ -698,9 +701,9 @@ export default function PengeluaranPage() {
       if (filterKat === editKategori) setFilterKat(newName)
       showToast(`Kategori diubah menjadi "${newName}"`)
       setEditKategori(null)
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLastRename(null)
-      showToast(err.message || 'Gagal mengubah kategori', false)
+      showToast(err instanceof Error ? err.message : 'Gagal mengubah kategori', false)
     } finally {
       setEditKategoriSubmitting(false)
     }
@@ -737,27 +740,17 @@ export default function PengeluaranPage() {
     }
   }, [preset, selectedMonth, availableMonths])
 
-  // ── Init ──
-  useEffect(() => {
-    const init = async () => {
-      if (!initialized) await initStore()
-      setStoreReady(true)
-    }
-    init()
-  }, [initialized, initStore])
+  // Data diambil via TanStack Query (persist + SWR); tidak perlu initStore/fetchExpenses manual
 
-  useEffect(() => {
-    if (storeReady) fetchExpenses()
-  }, [storeReady, fetchExpenses])
-
-  // ── Period-filtered expenses (dasar untuk summary & list) ──
+  // ── Period-filtered expenses (dasar untuk summary & list) — WIB ──
   const periodFiltered = useMemo(() => {
     const { from, to } = getPeriodRange(preset, selectedMonth, customFrom, customTo)
     if (!from && !to) return expenses
     return expenses.filter((e) => {
-      const d = new Date(e.created_at)
-      if (from && d < new Date(`${from}T00:00:00+07:00`)) return false
-      if (to && d > new Date(`${to}T23:59:59.999+07:00`)) return false
+      const d = wibDateFromISO(e.created_at)
+      if (!d) return false
+      if (from && d < from) return false
+      if (to && d > to) return false
       return true
     })
   }, [expenses, preset, selectedMonth, customFrom, customTo])
@@ -813,8 +806,8 @@ export default function PengeluaranPage() {
       })
       closeAddForm()
       showToast('Pengeluaran berhasil ditambahkan!')
-    } catch (err: any) {
-      showToast(err.message || 'Gagal menambahkan', false)
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Gagal menambahkan', false)
     } finally {
       setAddSubmitting(false)
     }
@@ -836,8 +829,8 @@ export default function PengeluaranPage() {
       })
       closeEditModal()
       showToast('Pengeluaran berhasil diperbarui!')
-    } catch (err: any) {
-      showToast(err.message || 'Gagal memperbarui', false)
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Gagal memperbarui', false)
     } finally {
       setEditSubmitting(false)
     }
@@ -850,14 +843,14 @@ export default function PengeluaranPage() {
       await deleteExpense(deleteId)
       showToast('Data pengeluaran dihapus')
       setDeleteId(null)
-    } catch (err: any) {
-      showToast(err.message || 'Gagal hapus', false)
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Gagal hapus', false)
     } finally {
       setDeleteSubmitting(false)
     }
   }
 
-  if (!storeReady) {
+  if (expensesQ.isLoading && !expensesQ.data) {
     return (
       <div className="w-full space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -1082,7 +1075,7 @@ export default function PengeluaranPage() {
           </span>
         </div>
 
-        {loading.expenses ? (
+        {expensesQ.isLoading && !expensesQ.data ? (
           <div className="flex items-center justify-center py-10">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>

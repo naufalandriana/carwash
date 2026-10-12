@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useUser } from '@/lib/Store'
 import { useLogout } from '@/lib/useLogout'
 import { getPageMeta } from '@/lib/navigation'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -123,9 +124,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </div>
           </div>
 
-          {/* Right — notifications + avatar. Pengeluaran / desktop nav now in sidebar sections, not header. */}
+          {/* Right — theme toggle + notifications + avatar */}
           <div className="flex items-center gap-1 lg:gap-2 shrink-0">
-            {/* Desktop: collapse handled by Sidebar toggle in layout; header keeps clean */}
+            <ThemeToggle />
             <button
               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors relative"
               aria-label="Notifikasi"

@@ -2,9 +2,12 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useAppStore, useUser, useVehiclesDB, useModelOptions } from '@/lib/Store'
+import { useReportTransactions } from '@/lib/queries/useReportTransactions'
+import { useExpensesQuery } from '@/lib/queries/useStaffVehiclesExpenses'
 import Toast from '@/components/ui/Toast'
 import Guard from '@/components/auth/Guard'
 import type { Transaction } from '@/lib/Data'
+import { todayWIB, wibDateFromISO } from '@/lib/date'
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 function fmtRupiah(n?: number) {
@@ -37,20 +40,23 @@ function formatTime(dateStr?: string): string {
 }
 
 function fmtDateInput(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  // WIB — pakai util agar jam 00:00-07:00 tidak salah tanggal
+  return todayWIB(d)
 }
 
 function getDayLabel(dateStr?: string): string {
   if (!dateStr) return 'Tanpa Tanggal'
+  const dWIB = wibDateFromISO(dateStr)
+  if (!dWIB) return 'Tanpa Tanggal'
+  const todayStr = todayWIB(new Date())
+  if (dWIB === todayStr) return 'Hari Ini'
+  // kemarin WIB
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (dWIB === todayWIB(yesterday)) return 'Kemarin'
   const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return 'Tanpa Tanggal'
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  const diffDays = Math.round((today - target) / 86400000)
-  if (diffDays === 0) return 'Hari Ini'
-  if (diffDays === 1) return 'Kemarin'
   return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   }).format(d)
 }
@@ -163,31 +169,60 @@ interface DropdownProps {
 }
 function Dropdown({ options, value, onChange, placeholder = 'Pilih', className = '' }: DropdownProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   const label = options.find((o) => o.value === value)?.label || placeholder
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (btnRef.current?.contains(t)) return
+      if (popRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [open])
+
+  const toggleOpen = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 6, left: r.left, width: r.width })
+    }
+    setOpen((p) => !p)
+  }
+
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((p) => !p)}
-        className="h-9 w-full px-3 pr-8 bg-surface-container border border-outline-variant rounded-full text-xs font-semibold flex items-center justify-between gap-1 hover:bg-surface-container-high transition-colors focus:outline-none"
+        onClick={toggleOpen}
+        className={`h-9 w-full px-3 pr-8 bg-surface-container border border-outline-variant rounded-full text-xs font-semibold flex items-center justify-between gap-1 hover:bg-surface-container-high transition-colors focus:outline-none relative ${className}`}
       >
         <span className="truncate">{label}</span>
         <span className="material-symbols-outlined text-[16px] text-on-surface-variant absolute right-2">
           {open ? 'expand_less' : 'expand_more'}
         </span>
       </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full min-w-[140px] bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg py-1 max-h-52 overflow-y-auto">
+      {open && pos && (
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 140) }}
+          className="z-[100] bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-52 overflow-y-auto"
+        >
           {options.map((o) => (
             <button
               key={o.value}
@@ -201,7 +236,7 @@ function Dropdown({ options, value, onChange, placeholder = 'Pilih', className =
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -480,12 +515,14 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string; icon
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function LaporanContent() {
   const {
-    transactions, expenses, updateTransactionStatus, updateTransaction,
-    fetchReportTransactions, fetchExpenses, fetchTransactionDateRange,
+    transactions, updateTransactionStatus, updateTransaction,
+    fetchTransactionDateRange,
   } = useAppStore()
   const user = useUser()
   const vehiclesDB = useVehiclesDB()
   const isAdmin = user?.role === 'admin'
+  const expensesQ = useExpensesQuery()
+  const expenses = expensesQ.data ?? []
 
   const [toast, setToast] = useState({ visible: false, message: '', success: true })
   const showToast = (message: string, success = true) => setToast({ visible: true, message, success })
@@ -500,9 +537,7 @@ function LaporanContent() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'Menunggu' | 'Proses' | 'Selesai'>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  // Report state
-  const [reportData, setReportData] = useState<(Transaction & { id: string })[]>([])
-  const [reportLoading, setReportLoading] = useState(false)
+  // Report state — pakai TanStack Query dengan pagination penuh (1000 per page sampai habis)
   const [preset, setPreset] = useState<PresetKey>('today')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -525,6 +560,21 @@ function LaporanContent() {
   )
 
   const [reportTab, setReportTab] = useState<'transaksi' | 'pengeluaran'>('transaksi')
+
+  // Helpers plat — sama kayak app/Transaksi/page.tsx
+  function formatPlate(raw: string): string {
+    const cleaned = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+    const letters = cleaned.match(/^[A-Z]*/)?.[0] || ''
+    const numbers = cleaned.slice(letters.length).match(/^[0-9]*/)?.[0] || ''
+    const lastLetters = cleaned.slice(letters.length + numbers.length).match(/^[A-Z]*/)?.[0] || ''
+    const part1 = letters.slice(0, 2)
+    const part2 = numbers.slice(0, 4)
+    const part3 = lastLetters.slice(0, 3)
+    let result = part1
+    if (part2) result += ' ' + part2
+    if (part3) result += ' ' + part3
+    return result
+  }
 
   // Edit modal
   const [editingTx, setEditingTx] = useState<(Transaction & { id: string }) | null>(null)
@@ -566,7 +616,7 @@ function LaporanContent() {
     if (editOperators.length === 0) { showToast('Pilih minimal 1 operator!', false); return }
     try {
       await updateTransaction(editingTx.id, {
-        plat: editPlate || 'N/A',
+        plat: formatPlate(editPlate) || 'N/A',
         model: editModel,
         type: editType.trim() || undefined,
         karyawan: editOperators.join(', '),
@@ -577,7 +627,7 @@ function LaporanContent() {
       })
       showToast('Transaksi berhasil diupdate')
       setEditingTx(null)
-      if (activeTab === 'report') loadReport()
+      if (activeTab === 'report') reportQ.refetch()
     } catch {
       showToast('Gagal update transaksi', false)
     }
@@ -597,30 +647,20 @@ function LaporanContent() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Load report
-  const loadReport = async () => {
-    setReportLoading(true)
-    try {
-      let from: string | undefined
-      let to: string | undefined
-      if (preset === 'custom') {
-        from = customFrom || undefined
-        to = customTo || undefined
-      } else if (preset !== 'all') {
-        const r = getPeriodRange(preset, selectedMonth, currentMonthLabel)
-        from = r.from; to = r.to
-      }
-      const data = await fetchReportTransactions(from, to)
-      setReportData(data)
-    } catch {
-      showToast('Gagal memuat laporan', false)
-    } finally {
-      setReportLoading(false)
-    }
-  }
+  // Report range derived dari preset — untuk TanStack Query
+  const reportRange = useMemo(() => {
+    if (preset === 'custom') return { from: customFrom || undefined, to: customTo || undefined }
+    if (preset === 'all') return { from: undefined as string | undefined, to: undefined as string | undefined }
+    const r = getPeriodRange(preset, selectedMonth, currentMonthLabel)
+    return { from: r.from, to: r.to }
+  }, [preset, selectedMonth, currentMonthLabel, customFrom, customTo])
+
+  const reportQ = useReportTransactions(reportRange.from, reportRange.to)
+  const reportData = reportQ.data ?? []
+  const reportLoading = reportQ.isFetching
 
   const handleRefresh = async () => {
-    await Promise.all([loadReport(), fetchExpenses()])
+    await Promise.all([reportQ.refetch(), expensesQ.refetch()])
   }
 
   useEffect(() => {
@@ -634,16 +674,8 @@ function LaporanContent() {
         setSelectedMonth((cur) => cur || months[0]?.value || '')
       })
     }
-    if (expenses.length === 0) fetchExpenses()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
-
-  useEffect(() => {
-    if (activeTab !== 'report') return
-    if (preset === 'month' && !selectedMonth) return
-    loadReport()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, preset, selectedMonth, customFrom, customTo])
 
   // History filter options
   const allModels = useMemo(() => vehiclesDB.map((v) => ({ name: v.name, type: v.tipe })), [vehiclesDB])
@@ -1730,8 +1762,11 @@ function LaporanContent() {
 
       {/* ═══ MODAL EDIT TRANSAKSI ═══ */}
       {editingTx && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full sm:max-w-lg bg-surface-container-lowest border border-outline-variant rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingTx(null) }}
+        >
+          <div className="w-full sm:max-w-lg bg-surface-container-lowest border border-outline-variant rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-surface-container-lowest border-b border-outline-variant px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
               <h3 className="text-lg font-bold text-on-surface">Edit Transaksi</h3>
               <button
@@ -1772,9 +1807,9 @@ function LaporanContent() {
                 <input
                   type="text"
                   placeholder="B 1234 XYZ"
-                  value={editPlate}
-                  onChange={(e) => setEditPlate(e.target.value.toUpperCase().slice(0, 10))}
-                  className="w-full h-12 px-4 bg-surface-container border-2 border-outline-variant rounded-xl text-lg font-extrabold tracking-widest uppercase focus:border-primary transition-colors"
+                  value={formatPlate(editPlate)}
+                  onChange={(e) => setEditPlate(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 9))}
+                  className="w-full h-14 px-4 bg-surface-container-lowest border-2 border-outline-variant rounded-xl text-xl font-extrabold tracking-[0.05em] uppercase focus:border-primary transition-colors"
                 />
               </div>
 
