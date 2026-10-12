@@ -103,12 +103,13 @@ const formatDateLong = (d: Date | null): string => {
 // TIPE & KONSTANTA
 // ═══════════════════════════════════════════════════════════
 
-type Period = 'today' | '7d' | '30d' | 'all'
+type Period = 'today' | '7d' | '30d' | 'custom' | 'all'
 
 const PERIODS: { key: Period; label: string; icon: string }[] = [
   { key: 'today', label: 'Hari Ini', icon: 'today' },
   { key: '7d',    label: '7 Hari',   icon: 'date_range' },
   { key: '30d',   label: '30 Hari',  icon: 'calendar_month' },
+  { key: 'custom',label: 'Custom',   icon: 'tune' },
   { key: 'all',   label: 'Semua',    icon: 'all_inclusive' },
 ]
 
@@ -149,6 +150,9 @@ function OperatorContent() {
 
   // Payroll state
   const [period, setPeriod] = useState<Period>('today')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
   const [detailTarget, setDetailTarget] = useState<any | null>(null)
 
   const showToast = (msg: string, success = true) =>
@@ -162,20 +166,37 @@ function OperatorContent() {
   // ── Filter transaksi berdasarkan periode ──
   const periodTransactions = useMemo(() => {
     if (period === 'all') return transactions
-
+    if (period === 'custom') {
+      const fromTs = customFrom ? new Date(customFrom + 'T00:00:00').getTime() : -Infinity
+      const toTs = customTo ? new Date(customTo + 'T23:59:59.999').getTime() : Infinity
+      return transactions.filter(tx => {
+        const d = getTxDate(tx)
+        if (!d) return false
+        const t = d.getTime()
+        return t >= fromTs && t <= toTs
+      })
+    }
     const now = new Date()
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-
     let startTime: number
     if (period === 'today') startTime = startOfToday
     else if (period === '7d') startTime = startOfToday - 6 * 86400000
     else startTime = startOfToday - 29 * 86400000
-
     return transactions.filter(tx => {
       const d = getTxDate(tx)
       return d !== null && d.getTime() >= startTime
     })
-  }, [transactions, period])
+  }, [transactions, period, customFrom, customTo])
+
+  const handleRefreshKaryawan = async () => {
+    setRefreshing(true)
+    try {
+      const { fetchTransactions, fetchStaff } = useAppStore.getState()
+      await Promise.all([fetchTransactions(), fetchStaff()])
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   // ── Hitung gaji + rincian per operator ──
   const operatorSalaries = useMemo(() => {
@@ -329,24 +350,6 @@ function OperatorContent() {
         )}
       </div>
 
-      {/* ═══ Filter Periode ═══ */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {PERIODS.map(p => (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              period === p.key
-                ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[15px]">{p.icon}</span>
-            {p.label}
-          </button>
-        ))}
-      </div>
-
       {/* ═══ Kartu Ringkasan ═══ */}
       <div className="relative overflow-hidden bg-gradient-to-br from-success via-success to-success/80 rounded-2xl p-5 shadow-lg shadow-success/20 text-white">
         <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
@@ -373,6 +376,38 @@ function OperatorContent() {
             </span>
           </div>
         </div>
+      </div>
+
+       {/* ═══ Filter Periode ═══ */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Periode</span>
+          <button onClick={handleRefreshKaryawan} disabled={refreshing} className="h-7 px-2.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center gap-1 disabled:opacity-50">
+            <span className="material-symbols-outlined text-[14px]">{refreshing ? 'hourglass_top' : 'refresh'}</span> Refresh
+          </button>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+          {PERIODS.map(p => (
+            <button
+              key={p.key}
+              onClick={() => setPeriod(p.key)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                period === p.key
+                  ? 'bg-primary text-white shadow-sm shadow-primary/30'
+                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high border border-outline-variant'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">{p.icon}</span>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {period === 'custom' && (
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Dari</label><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-full h-9 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>
+            <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Sampai</label><input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="w-full h-9 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>
+          </div>
+        )}
       </div>
 
       {/* ═══ Form Tambah ═══ */}

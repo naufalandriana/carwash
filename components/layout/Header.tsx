@@ -127,14 +127,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
           {/* Right — theme toggle + notifications + avatar */}
           <div className="flex items-center gap-1 lg:gap-2 shrink-0">
             <ThemeToggle />
-            <button
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors relative"
-              aria-label="Notifikasi"
-            >
-              <span className="material-symbols-outlined text-on-surface-variant text-[22px]" aria-hidden>notifications</span>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border-2 border-white" aria-hidden></span>
-            </button>
-
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowDropdown((v) => !v)}

@@ -187,12 +187,17 @@ function Dropdown({ options, value, onChange, placeholder = 'Pilih', className =
 
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
+    const onScroll = (e: Event) => {
+      const t = e.target as Node | null
+      if (t && popRef.current?.contains(t as Node)) return
+      const isDocScroll = t === document || (t as unknown) === window || t instanceof Document
+      if (isDocScroll) setOpen(false)
+    }
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', () => setOpen(false))
     return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', () => setOpen(false))
     }
   }, [open])
 
@@ -221,7 +226,9 @@ function Dropdown({ options, value, onChange, placeholder = 'Pilih', className =
         <div
           ref={popRef}
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 140) }}
-          className="z-[100] bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-52 overflow-y-auto"
+          className="z-[100] bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-52 overflow-y-auto overscroll-contain"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
         >
           {options.map((o) => (
             <button
@@ -269,12 +276,17 @@ function MonthPresetChip({
 
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
+    const onScroll = (e: Event) => {
+      const t = e.target as Node | null
+      if (t && popRef.current?.contains(t as Node)) return
+      const isDocScroll = t === document || (t as unknown) === window || t instanceof Document
+      if (isDocScroll) setOpen(false)
+    }
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', () => setOpen(false))
     return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', () => setOpen(false))
     }
   }, [open])
 
@@ -308,7 +320,9 @@ function MonthPresetChip({
         <div
           ref={popRef}
           style={{ position: 'fixed', top: pos.top, left: pos.left }}
-          className="z-[100] w-48 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-56 overflow-y-auto"
+          className="z-[100] w-48 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl py-1 max-h-56 overflow-y-auto overscroll-contain"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
         >
           {months.length === 0 ? (
             <p className="px-4 py-2 text-xs text-on-surface-variant">Memuat daftar bulan...</p>
@@ -1120,10 +1134,10 @@ function LaporanContent() {
       {/* ═══════════════════ TAB LAPORAN ═══════════════════ */}
       {activeTab === 'report' ? (
         <div className="space-y-4">
-          {/* Hero card */}
+          {/* Hero card — merah kalau Pengeluaran, biru kalau Transaksi */}
           <div
             className={`relative overflow-hidden rounded-2xl p-5 shadow-lg text-white ${
-              reportTab === 'pengeluaran' && netProfit < 0
+              reportTab === 'pengeluaran'
                 ? 'bg-gradient-to-br from-error via-error to-error/80 shadow-error/20'
                 : 'bg-gradient-to-br from-primary via-primary to-primary/80 shadow-primary/20'
             }`}
@@ -1133,28 +1147,26 @@ function LaporanContent() {
             <div className="relative">
               <div className="flex items-center gap-2 opacity-90">
                 <span className="material-symbols-outlined text-[16px]">
-                  {reportTab === 'pengeluaran' ? 'account_balance_wallet' : 'payments'}
+                  {reportTab === 'pengeluaran' ? 'money_off' : 'payments'}
                 </span>
                 <p className="text-[11px] font-semibold uppercase tracking-wider">
-                  {reportTab === 'pengeluaran' ? 'Laba Bersih' : 'Total Pendapatan'} · {periodeText}
+                  {reportTab === 'pengeluaran' ? 'Pengeluaran' : 'Total Pendapatan'} · {periodeText}
                 </p>
               </div>
               <p className="text-3xl font-extrabold mt-1.5 tracking-tight">
-                {reportTab === 'pengeluaran'
-                  ? (netProfit >= 0 ? '' : '-') + fmtRupiah(Math.abs(netProfit))
-                  : fmtRupiah(reportStats.total)}
+                {reportTab === 'pengeluaran' ? fmtRupiah(expenseStats.total) : fmtRupiah(reportStats.total)}
               </p>
               <div className="flex items-center gap-3 mt-3 text-[11px] font-medium opacity-90">
                 {reportTab === 'pengeluaran' ? (
                   <>
                     <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[13px]">trending_up</span>
-                      {fmtRupiah(reportStats.total)} masuk
+                      <span className="material-symbols-outlined text-[13px]">receipt_long</span>
+                      {expenseStats.count} item
                     </span>
                     <span className="w-1 h-1 rounded-full bg-white/60" />
                     <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[13px]">trending_down</span>
-                      {fmtRupiah(expenseStats.total)} keluar
+                      <span className="material-symbols-outlined text-[13px]">category</span>
+                      {expenseStats.topKategori.length} kategori
                     </span>
                   </>
                 ) : (
@@ -1198,7 +1210,7 @@ function LaporanContent() {
             periodeText={periodeText}
           />
 
-          {/* Sub-tab */}
+          {/* Sub-tab: Transaksi biru, Pengeluaran merah */}
           <div className="flex bg-surface-container-lowest border border-outline-variant rounded-xl p-1 gap-1">
             {(['transaksi', 'pengeluaran'] as const).map((t) => (
               <button
@@ -1206,7 +1218,9 @@ function LaporanContent() {
                 onClick={() => setReportTab(t)}
                 className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   reportTab === t
-                    ? 'bg-primary text-white shadow'
+                    ? t === 'pengeluaran'
+                      ? 'bg-error text-white shadow shadow-error/20'
+                      : 'bg-primary text-white shadow shadow-primary/20'
                     : 'text-on-surface-variant hover:bg-surface-container'
                 }`}
               >
@@ -1418,21 +1432,32 @@ function LaporanContent() {
           {/* ══ SUB-TAB: PENGELUARAN ══ */}
           {reportTab === 'pengeluaran' && (
             <div className="space-y-4">
+              {/* Cards: Laba Bersih + Kategori Terbesar — sama kayak Pengeluaran: bg-surface-container-lowest ... */}
               <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  icon="money_off"
-                  iconBg="bg-error-container"
-                  iconColor="text-error"
-                  label="Total Pengeluaran"
-                  value={fmtRupiah(expenseStats.total)}
-                />
-                <StatCard
-                  icon="receipt"
-                  iconBg="bg-surface-container"
-                  iconColor="text-on-surface-variant"
-                  label="Jumlah Item"
-                  value={`${expenseStats.count} item`}
-                />
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3.5">
+                  <div className="w-8 h-8 rounded-lg bg-success-container flex items-center justify-center mb-2.5">
+                    <span className="material-symbols-outlined text-success text-[16px] icon-fill">trending_up</span>
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Laba Bersih</p>
+                  <h3 className={`text-sm font-extrabold mt-0.5 truncate ${netProfit < 0 ? 'text-error' : 'text-on-surface'}`}>
+                    {netProfit >= 0 ? fmtRupiah(netProfit) : '-' + fmtRupiah(Math.abs(netProfit))}
+                  </h3>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5 truncate">{periodeText}</p>
+                </div>
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3.5">
+                  <div className="w-8 h-8 rounded-lg bg-error-container flex items-center justify-center mb-2.5">
+                    <span className="material-symbols-outlined text-error text-[16px] icon-fill">category</span>
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Kategori Terbesar</p>
+                  {expenseStats.topKategori[0] ? (
+                    <>
+                      <h3 className="text-sm font-extrabold mt-0.5 text-on-surface truncate">{expenseStats.topKategori[0][0]}</h3>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5 truncate">{fmtRupiah(expenseStats.topKategori[0][1])}</p>
+                    </>
+                  ) : (
+                    <h3 className="text-sm font-extrabold mt-0.5 text-on-surface-variant truncate">-</h3>
+                  )}
+                </div>
               </div>
 
               {expenseStats.topKategori.length > 0 && (
@@ -1752,7 +1777,7 @@ function LaporanContent() {
           onClick={exportHandler}
           disabled={reportLoading || exportCount === 0}
           className={`fixed bottom-24 right-4 z-30 h-12 pl-4 pr-5 rounded-full shadow-xl flex items-center gap-2 font-semibold text-sm text-white active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none ${
-            reportTab === 'transaksi' ? 'bg-success shadow-success/30' : 'bg-error shadow-error/30'
+            reportTab === 'transaksi' ? 'bg-primary shadow-primary/30' : 'bg-error shadow-error/30'
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">download</span>

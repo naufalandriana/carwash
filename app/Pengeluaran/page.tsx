@@ -51,6 +51,75 @@ function SectionTitle({
   )
 }
 
+// ─── Collapsible Filter Panel (periode + pencarian + kategori) ───────────────
+function FilterPanel(props: {
+  preset: PresetKey; setPreset: (v: PresetKey) => void
+  customFrom: string; customTo: string; setCustomFrom: (v: string) => void; setCustomTo: (v: string) => void
+  availableMonths: { value: string; label: string }[]; selectedMonth: string; setSelectedMonth: (v: string) => void
+  isFetching: boolean; onRefresh: () => void
+  search: string; setSearch: (v: string) => void
+  filterKat: string; setFilterKat: (v: string) => void
+  allKategori: string[]; filteredCount: number
+}) {
+  const [open, setOpen] = useState(false)
+  const { preset, setPreset, customFrom, customTo, setCustomFrom, setCustomTo, availableMonths, selectedMonth, setSelectedMonth, isFetching, onRefresh, search, setSearch, filterKat, setFilterKat, allKategori, filteredCount } = props
+  const currentMonthLabel = availableMonths.find((m) => m.value === selectedMonth)?.label ?? ''
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-hidden">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container/50 transition-colors" aria-expanded={open}>
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span></span>
+          <span className="min-w-0">
+            <span className="block text-xs font-bold text-on-surface leading-none">Periode &amp; Filter</span>
+            <span className="block text-[11px] text-on-surface-variant truncate">{preset === 'all' ? 'Semua' : preset === 'custom' ? `${customFrom || '-'} s/d ${customTo || '-'}` : preset === 'month' ? (currentMonthLabel || 'Bulan Ini') : preset === 'today' ? 'Hari Ini' : preset} · {filteredCount} hasil</span>
+          </span>
+        </span>
+        <span className="flex items-center gap-2 shrink-0">
+          <span className="hidden sm:inline text-[11px] text-primary font-semibold">{open ? 'Tutup' : 'Ubah'}</span>
+          <span className={`material-symbols-outlined text-on-surface-variant text-[20px] transition-transform ${open ? 'rotate-180' : ''}`}>expand_more</span>
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-3 border-t border-outline-variant/50 space-y-3 bg-surface-container/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Periode</span>
+            <button onClick={onRefresh} disabled={isFetching} className="h-7 px-2.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center gap-1 disabled:opacity-50">
+              <span className="material-symbols-outlined text-[14px]">{isFetching ? 'hourglass_top' : 'refresh'}</span> Refresh
+            </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+            {presetOptions.map((opt) => opt.value === 'month' ? (
+              <MonthPresetChip key={opt.value} active={preset === 'month'} months={availableMonths} value={selectedMonth} onSelect={setSelectedMonth} onActivate={() => setPreset('month')} />
+            ) : (
+              <button key={opt.value} onClick={() => setPreset(opt.value)} className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all ${preset === opt.value ? 'bg-primary text-white shadow-md' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:bg-surface-container-high'}`}>{opt.label}</button>
+            ))}
+          </div>
+          {preset === 'custom' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Dari</label><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="w-full h-9 px-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>
+              <div><label className="text-[10px] font-semibold text-on-surface-variant uppercase block mb-1">Sampai</label><input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="w-full h-9 px-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm focus:border-primary outline-none" /></div>
+            </div>
+          )}
+          <div className="h-px bg-outline-variant/40" />
+          <SectionTitle icon="filter_alt" label="Filter & Pencarian" right={<span className="text-[11px] text-on-surface-variant font-medium">{filteredCount} hasil</span>} />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+            <input type="text" placeholder="Cari pengeluaran..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-11 pl-10 pr-3 bg-surface-container-lowest border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none transition-colors" />
+          </div>
+          {allKategori.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap">
+              <button onClick={() => setFilterKat('all')} className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${filterKat === 'all' ? 'bg-primary text-white' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:bg-surface-container-high'}`}>Semua</button>
+              {allKategori.map((k) => (
+                <button key={k} onClick={() => setFilterKat(filterKat === k ? 'all' : k)} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${filterKat === k ? 'bg-primary text-white' : 'bg-surface-container-lowest border border-outline-variant text-on-surface-variant'}`}>{k}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Period filter types ───────────────────────────────────────────────────
 type PresetKey = 'today' | 'month' | 'custom' | 'all'
 
@@ -895,77 +964,21 @@ export default function PengeluaranPage() {
         )}
       </div>
 
-      {/* ── Filter Periode ── */}
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 space-y-2">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="material-symbols-outlined text-[16px] text-primary">calendar_month</span>
-          <p className="text-xs font-bold text-on-surface">
-            Periode {preset === 'month' && currentMonthLabel ? `· ${currentMonthLabel}` : ''}
-          </p>
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-          {presetOptions.map((opt) => (
-            opt.value === 'month' ? (
-              <MonthPresetChip
-                key={opt.value}
-                active={preset === 'month'}
-                months={availableMonths}
-                value={selectedMonth}
-                onSelect={setSelectedMonth}
-                onActivate={() => setPreset('month')}
-              />
-            ) : (
-              <button
-                key={opt.value}
-                onClick={() => setPreset(opt.value)}
-                className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
-                  preset === opt.value
-                    ? 'bg-primary text-white shadow-md'
-                    : 'bg-surface-container text-on-surface-variant border border-outline-variant hover:bg-surface-container-high'
-                }`}
-              >
-                {opt.label}
-              </button>
-            )
-          ))}
-        </div>
-
-        {/* Custom range */}
-        {preset === 'custom' && (
-          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 pt-1">
-            <div>
-              <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Dari</label>
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-on-surface-variant font-semibold uppercase block mb-1">Sampai</label>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="w-full h-10 px-3 bg-surface-container border border-outline-variant rounded-xl text-sm focus:border-primary outline-none"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-error-container flex items-center justify-center mb-2">
-            <span className="material-symbols-outlined text-error text-[16px] icon-fill">money_off</span>
+        <div className="relative overflow-hidden bg-gradient-to-br from-error via-error to-error/85 rounded-2xl p-4 min-w-0 text-white shadow-lg shadow-error/20">
+          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
+          <div className="absolute -right-2 -bottom-6 w-20 h-20 rounded-full bg-white/5" />
+          <div className="relative">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center mb-2">
+              <span className="material-symbols-outlined text-white text-[16px] icon-fill">money_off</span>
+            </div>
+            <p className="text-[10px] text-white/80 font-bold uppercase tracking-wide">Total Pengeluaran</p>
+            <p className="text-base font-extrabold mt-0.5 break-words text-white">{fmtRupiah(summary.total)}</p>
+            <p className="text-[11px] text-white/70 mt-1">
+              {summary.count} item · {summary.sorted.length} kategori
+            </p>
           </div>
-          <p className="text-[10px] text-on-surface-variant font-semibold uppercase tracking-wide">Total Pengeluaran</p>
-          <p className="text-base font-extrabold text-error mt-0.5 break-words">{fmtRupiah(summary.total)}</p>
-          <p className="text-[11px] text-on-surface-variant mt-1">
-            {summary.count} item · {summary.sorted.length} kategori
-          </p>
         </div>
 
         <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 min-w-0">
@@ -1011,57 +1024,26 @@ export default function PengeluaranPage() {
         </div>
       )}
 
-      {/* ── Filter & Search ── */}
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 space-y-3">
-        <SectionTitle
-          icon="filter_alt"
-          label="Filter & Pencarian"
-          right={
-            <span className="text-[11px] text-on-surface-variant font-medium">
-              {filtered.length} hasil
-            </span>
-          }
-        />
-
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-[18px]">
-            search
-          </span>
-          <input
-            type="text"
-            placeholder="Cari pengeluaran..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-11 pl-10 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none transition-colors"
-          />
-        </div>
-
-        {allKategori.length > 0 && (
-          <div className="flex gap-1.5 flex-wrap">
-            <button
-              onClick={() => setFilterKat('all')}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all ${
-                filterKat === 'all'
-                  ? 'bg-primary text-white'
-                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-              }`}
-            >
-              Semua
-            </button>
-            {allKategori.map((k) => (
-              <button
-                key={k}
-                onClick={() => setFilterKat(filterKat === k ? 'all' : k)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                  filterKat === k ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant'
-                }`}
-              >
-                {k}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* ── Periode + Filter (collapsible — urutan sama kayak Pengeluaran lama: setelah summary, sebelum list) ── */}
+      <FilterPanel
+        preset={preset}
+        setPreset={setPreset}
+        customFrom={customFrom}
+        customTo={customTo}
+        setCustomFrom={setCustomFrom}
+        setCustomTo={setCustomTo}
+        availableMonths={availableMonths}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        isFetching={expensesQ.isFetching}
+        onRefresh={() => expensesQ.refetch()}
+        search={search}
+        setSearch={setSearch}
+        filterKat={filterKat}
+        setFilterKat={setFilterKat}
+        allKategori={allKategori}
+        filteredCount={filtered.length}
+      />
 
       {/* ── List ── */}
       <div>
