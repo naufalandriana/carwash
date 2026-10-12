@@ -36,21 +36,6 @@ const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ]
 
-// ─── Section title ───────────────────────────────────────────────────────────
-function SectionTitle({
-  icon, label, right,
-}: { icon: string; label: string; right?: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-        <span className="material-symbols-outlined text-[18px] text-primary">{icon}</span>
-        <h2 className="text-sm font-bold text-on-surface">{label}</h2>
-      </div>
-      {right}
-    </div>
-  )
-}
-
 // ─── Collapsible Filter Panel (periode + pencarian + kategori) ───────────────
 function FilterPanel(props: {
   preset: PresetKey; setPreset: (v: PresetKey) => void
