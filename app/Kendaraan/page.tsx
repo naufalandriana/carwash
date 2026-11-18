@@ -24,8 +24,16 @@ interface DeleteTarget {
   tipe: 'mobil' | 'motor'
 }
 
+interface EditTarget {
+  id: string
+  name: string
+  tipe: 'mobil' | 'motor'
+  price_expres: number
+  price_hidrolik: number
+}
+
 function KendaraanContent() {
-  const { addVehicle, deleteVehicle } = useAppStore()
+  const { addVehicle, updateVehicle, deleteVehicle } = useAppStore()
   const vehiclesDB = useVehiclesDB()
   const user = useUser()
   const isAdmin = user?.role === 'admin'
@@ -40,6 +48,14 @@ function KendaraanContent() {
   // ── Confirm delete modal state ──
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // ── Edit modal state ──
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editTipe, setEditTipe] = useState<'mobil' | 'motor'>('mobil')
+  const [editPriceExpres, setEditPriceExpres] = useState('')
+  const [editPriceHidrolik, setEditPriceHidrolik] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // ── Toast (sama seperti halaman lain) ──
   const [toast, setToast] = useState({ visible: false, message: '', success: true })
@@ -92,6 +108,59 @@ function KendaraanContent() {
       showToast('Kendaraan berhasil ditambahkan')
     } catch (err: any) {
       showToast(err?.message || 'Gagal menambahkan kendaraan', false)
+    }
+  }
+
+  // ── Open edit modal ──
+  const requestEdit = (v: EditTarget) => {
+    setEditTarget({ ...v })
+    setEditName(v.name)
+    setEditTipe(v.tipe)
+    setEditPriceExpres(formatRupiahInput(String(v.price_expres)))
+    setEditPriceHidrolik(formatRupiahInput(String(v.price_hidrolik)))
+  }
+
+  // ── Simpan perubahan edit ──
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editTarget) return
+    const pExp = parseRupiahInput(editPriceExpres)
+    const pHid = parseRupiahInput(editPriceHidrolik)
+
+    if (!editName.trim() || isNaN(pExp) || pExp < 0 || isNaN(pHid) || pHid < 0) {
+      showToast('Isi semua data dengan benar!', false)
+      return
+    }
+    const exists = vehiclesDB.some(
+      (v) =>
+        v.id !== editTarget.id &&
+        v.name.toLowerCase() === editName.trim().toLowerCase() &&
+        v.tipe === editTipe
+    )
+    if (exists) {
+      showToast('Nama model sudah ada!', false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      await updateVehicle(editTarget.id, {
+        name: editName.trim(),
+        tipe: editTipe,
+        price_expres: pExp,
+        price_hidrolik: pHid,
+      })
+      const storeError = useAppStore.getState().error
+      if (storeError) {
+        showToast(storeError, false)
+        return
+      }
+      showToast('Kendaraan berhasil diperbarui')
+      setEditTarget(null)
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Gagal memperbarui kendaraan', false)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -300,16 +369,136 @@ function KendaraanContent() {
               </div>
 
               {isAdmin && (
-                <button
-                  onClick={() => requestDelete(v)}
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error-container/40 hover:text-error transition-colors flex-shrink-0"
-                  aria-label="Hapus"
-                >
-                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => requestEdit(v)}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-primary-container/40 hover:text-primary transition-colors"
+                    aria-label="Edit"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                  </button>
+                  <button
+                    onClick={() => requestDelete(v)}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error-container/40 hover:text-error transition-colors"
+                    aria-label="Hapus"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
+                </div>
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ═══ MODAL EDIT ═══ */}
+      {editTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && !saving && setEditTarget(null)}
+        >
+          <div className="w-full max-w-sm bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <form onSubmit={handleSaveEdit} className="space-y-3 p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-primary text-[22px] icon-fill">
+                    edit
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-on-surface">Edit Kendaraan</h3>
+                  <p className="text-xs text-on-surface-variant">Ubah data model dan harganya</p>
+                </div>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Nama model (contoh: Small Cars, MPV)"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full h-12 px-4 bg-surface-container border border-outline-variant rounded-xl text-sm font-medium focus:border-primary outline-none transition-colors"
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditTipe('mobil')}
+                  className={`h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition-all ${
+                    editTipe === 'mobil'
+                      ? 'bg-primary text-white shadow-md shadow-primary/20'
+                      : 'bg-surface-container border border-outline-variant text-on-surface-variant'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">directions_car</span>
+                  Mobil
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditTipe('motor')}
+                  className={`h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 transition-all ${
+                    editTipe === 'motor'
+                      ? 'bg-primary text-white shadow-md shadow-primary/20'
+                      : 'bg-surface-container border border-outline-variant text-on-surface-variant'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">motorcycle</span>
+                  Motor
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-on-surface-variant">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Expres"
+                    value={editPriceExpres}
+                    onChange={(e) => setEditPriceExpres(formatRupiahInput(e.target.value))}
+                    className="w-full h-11 pl-9 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-semibold focus:border-primary outline-none"
+                  />
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-on-surface-variant">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Hidrolik"
+                    value={editPriceHidrolik}
+                    onChange={(e) => setEditPriceHidrolik(formatRupiahInput(e.target.value))}
+                    className="w-full h-11 pl-9 pr-3 bg-surface-container border border-outline-variant rounded-xl text-sm font-semibold focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => !saving && setEditTarget(null)}
+                  disabled={saving}
+                  className="flex-1 h-11 bg-surface-container border border-outline-variant rounded-xl text-sm font-semibold text-on-surface-variant active:scale-95 transition disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 h-11 bg-primary text-white rounded-xl font-bold text-sm shadow-md shadow-primary/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {saving ? (
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <span className="material-symbols-outlined text-[16px]">save</span>
+                  )}
+                  {saving ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
