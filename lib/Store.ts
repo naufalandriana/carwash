@@ -106,6 +106,7 @@ interface AppStore {
 
   fetchVehicles: () => Promise<void>
   addVehicle: (vehicle: Omit<DBVehicle, 'id' | 'created_at'>) => Promise<void>
+  updateVehicle: (id: string, updates: Partial<Pick<DBVehicle, 'name' | 'tipe' | 'price_expres' | 'price_hidrolik'>>) => Promise<void>
   deleteVehicle: (id: string) => Promise<void>
 
   // ── Expense methods ──
@@ -518,6 +519,40 @@ export const useAppStore = create<AppStore>((set, get) => ({
         vehiclesDB: s.vehiclesDB.filter((v) => v.id !== tempId),
         error: msg,
       }))
+      throw err
+    }
+  },
+
+  // ── Update Vehicle ────────────────────────────────────────────────────────
+  updateVehicle: async (id, updates) => {
+    const prevVehicles = get().vehicles
+    const prevVehiclesDB = get().vehiclesDB
+    set((s) => ({
+      vehicles: s.vehicles.map((v) =>
+        v.id === id
+          ? {
+              ...v,
+              ...(updates.name !== undefined ? { name: updates.name } : {}),
+              ...(updates.price_expres !== undefined ? { price: updates.price_expres } : {}),
+            }
+          : v
+      ),
+      vehiclesDB: s.vehiclesDB.map((v) => (v.id === id ? { ...v, ...updates } : v)),
+    }))
+    try {
+      const dbUpdates: Record<string, unknown> = {}
+      if (updates.name !== undefined) dbUpdates.name = updates.name
+      if (updates.tipe !== undefined) dbUpdates.tipe = updates.tipe
+      if (updates.price_expres !== undefined) dbUpdates.price_expres = updates.price_expres
+      if (updates.price_hidrolik !== undefined) dbUpdates.price_hidrolik = updates.price_hidrolik
+      const { error } = await supabase
+        .from('vehicles')
+        .update(dbUpdates)
+        .eq('id', id)
+      if (error) throw error
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set({ vehicles: prevVehicles, vehiclesDB: prevVehiclesDB, error: msg })
       throw err
     }
   },
